@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+
+client/glew-2.1.0
+client/glfw-3.2.1
