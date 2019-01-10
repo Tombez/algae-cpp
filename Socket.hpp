@@ -1,9 +1,12 @@
+#pragma once
+
+#include "./whichSystem.hpp";
+
 #include <cstdlib>
 #include <cstdio>
-#include <stdint.h>
+#include <cstdint>
 
-#if defined(unix) || defined(__unix) || defined(__unix__) || defined(__linux__)
-	#include <stdlib.h>
+#if defined(unix)
 	#include <unistd.h>
 	#include <errno.h>
 	#include <netdb.h>
@@ -19,18 +22,13 @@
 	#define SOCKET_ERROR -1
 	//#define SOCKET_WOULD_BLOCK EWOULDBLOCK
 #elif defined(_WIN32)
-	#define WIN32_LEAN_AND_MEAN
-	#include <winsock2.h>
-	// #pragma comment(lib,"ws2_32.lib") // winsock2 Library
+	#include <winsock2.h> // #pragma comment(lib,"ws2_32.lib")
 	#define socklen_t int
 	#define poll WSAPoll
 	#define nfds_t ULONG
 	#define sockerr WSAGetLastError()
 	#define EWOULDBLOCK WSAEWOULDBLOCK
 	#define close closesocket
-	//#define inet_pton InetPton
-#else
-	#error "Expected to compile on a unix or windows system.. :("
 #endif
 
 namespace sock {
