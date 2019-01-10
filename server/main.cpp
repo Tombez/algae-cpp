@@ -1,5 +1,3 @@
-#pragma once
-
 #include "../whichSystem.hpp"
 #include "../Socket.hpp"
 

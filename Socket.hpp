@@ -1,6 +1,6 @@
 #pragma once
 
-#include "./whichSystem.hpp";
+#include "./whichSystem.hpp"
 
 #include <cstdlib>
 #include <cstdio>
