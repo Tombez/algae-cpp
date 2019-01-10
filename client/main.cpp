@@ -1,14 +1,21 @@
 #include "../TimeStamp.hpp"
 #include "../Geometry.hpp"
 #include "../colorUtils.hpp"
+#include "../Socket.hpp"
 #include "./initGLFW.hpp"
 #include "./Drawable.hpp"
+
+// #if defined(unix)
+// #elif defined (_WIN32)
+// 	#include "../server/inet_pton4.hpp"
+// #endif
 
 #include <cstdio>
 #include <iostream>
 #include <cmath>
 #include <cstdint>
 #include <vector>
+#include <algorithm>
 
 const float PI = 3.14159265358979323846;
 const float TAU = 2 * PI;
@@ -49,6 +56,26 @@ uint32_t second = 0;
 
 std::vector<float> vbod;
 std::vector<GLuint> ebod;
+
+sock::Socket socky(1400);
+struct sockaddr_in server;
+
+void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
+	// printf("message from %s:%u , opcode %u\n", inet_ntoa(from->sin_addr), ntohs(from->sin_port), data[0]);
+	uint8_t opcode = data[0];
+
+	switch (opcode) {
+		case 1: // accepted connection
+			puts("connection accepted");
+			break;
+		case 2: // error
+			printf("error response from server: %s\n", data + 1 * sizeof(uint8_t));
+			break;
+		case 3: // world update
+			puts("world update");
+			break;
+	}
+}
 
 void update(float dt) {
 	bias += 0.02 * dt;
@@ -100,13 +127,20 @@ int main() {
 	ea[(numPoints - 1) * 3 + 1] = 0;
 	hexagon = Drawable(va, (numPoints + 1) * 6, ea, numPoints * 3);
 
+	socky.msgCb = onReceive;
+	server.sin_family = AF_INET;
+	server.sin_addr.s_addr = htonl(127 << 24 | 0 << 16 | 0 << 8 | 1);
+	server.sin_port = htons((uint16_t)49152);
+
+	socky.sendMessage(&server, (uint8_t*)"\x01\0", (uint16_t)2);
+
 	float targetDt = 1.0;
 
 	while(!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
+		socky.processMessages();
 
 		now.refresh();
-
 		uint64_t dif = now - prevTime;
 		float dt = dif / 16666.0;
 		if (dt >= targetDt) {

@@ -1,5 +1,6 @@
 #include "../whichSystem.hpp"
 #include "../Socket.hpp"
+#include "../TimeStamp.hpp"
 
 #if defined(unix)
 #elif defined (_WIN32)
@@ -10,6 +11,7 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include <algorithm>
 
 class Player;
 
@@ -31,11 +33,13 @@ public:
 };
 
 const uint16_t PORT = 49152;
-const uint32_t MAX_PLAYERS = 9999999;
+const uint32_t MAX_PLAYERS = 9999;
 
 sock::Socket socky(1400);
 struct sockaddr_in dest;
 std::vector<Player> players;
+TimeStamp now;
+TimeStamp prevTime;
 
 void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
 	printf("message from %s:%u , opcode %u\n", inet_ntoa(from->sin_addr), ntohs(from->sin_port), data[0]);
@@ -46,9 +50,21 @@ void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
 			if (players.size() < MAX_PLAYERS) {
 				puts("creating new client");
 				players.emplace_back(from->sin_addr.s_addr, from->sin_port);
+				socky.sendMessage(from, (uint8_t*)"\x01\0", (uint16_t)2);
+			} else {
+				socky.sendMessage(from, (uint8_t*)"\x02server already full\0", (uint16_t)21);
 			}
-			socky.sendMessage(from, (uint8_t*)"\x01\0", (uint16_t)2);
 			break;
+	}
+}
+
+void update(float dt) {
+	socky.processMessages();
+	for (uint32_t i = 0; i < players.size(); ++i) {
+		Player& player = players[i];
+		dest.sin_addr.s_addr = player.ip;
+		dest.sin_port = player.port;
+		socky.sendMessage(&dest, (uint8_t*)"\x03\0", (uint16_t)2);
 	}
 }
 
@@ -58,15 +74,19 @@ int main() {
 
 	puts("listening for messages...");
 
+	float targetDt = 1.0;
+
 	while(true) {
-		socky.processMessages();
-		for (uint32_t i = 0; i < players.size(); ++i) {
-			Player& player = players[i];
-			dest.sin_addr.s_addr = player.ip;
-			dest.sin_port = player.port;
-			socky.sendMessage(&dest, (uint8_t*)"\x02\0", 2u);
+		now.refresh();
+		uint64_t dif = now - prevTime;
+		float dt = dif / 16666.0;
+		if (dt >= targetDt) {
+			prevTime = now;
+			targetDt = std::max(1 - (dt - targetDt), 0.0f);
+
+			update(dt);
 		}
 	}
 
-	return EXIT_SUCCESS;
+	return 0;
 }
