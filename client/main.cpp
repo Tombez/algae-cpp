@@ -24,7 +24,28 @@ const int numPoints = 6;
 Point mouse(0, 0);
 Point prev(0, 0);
 
+float bias = 0.0;
+float bx = 0.0;
+float by = 0.0;
+float r = 0.5;
+float sr = 0.03;
+
+TimeStamp now;
+TimeStamp prevTime;
+
+uint16_t fps = 0;
+uint32_t prevSecond = 0;
+uint32_t second = 0;
+
+std::vector<float> vbod;
+std::vector<GLuint> ebod;
+
+sock::Socket socky(1400);
+struct sockaddr_in server;
+
 Drawable hexagon;
+const int morenum = 60;
+Drawable more[morenum];
 
 static void cursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
 	prev = mouse;
@@ -42,26 +63,7 @@ static void keyCallback(GLFWwindow* window, int key, int scancode, int action, i
 	}
 }
 
-float bias = 0.0;
-float bx = 0.0;
-float by = 0.0;
-float r = 0.5;
-
-TimeStamp now;
-TimeStamp prevTime;
-
-uint16_t fps = 0;
-uint32_t prevSecond = 0;
-uint32_t second = 0;
-
-std::vector<float> vbod;
-std::vector<GLuint> ebod;
-
-sock::Socket socky(1400);
-struct sockaddr_in server;
-
 void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
-	// printf("message from %s:%u , opcode %u\n", inet_ntoa(from->sin_addr), ntohs(from->sin_port), data[0]);
 	uint8_t opcode = data[0];
 
 	switch (opcode) {
@@ -76,7 +78,18 @@ void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
 			break;
 	}
 }
-
+template<typename T>
+void addArrayToList(std::vector<T>& list, T* arr, uint32_t len, uint32_t off) {
+	uint32_t size = list.size();
+	uint32_t cap = list.capacity();
+	if (cap == 0)
+		cap = len;
+	while (size + len > cap)
+		cap *= 2;
+	list.reserve(cap);
+	for (uint32_t i = 0; i < len; ++i)
+		list.push_back(arr[i] + off);
+}
 void update(float dt) {
 	bias += 0.02 * dt;
 	bx = mouse.x / ww * 2.0 - 1.0;
@@ -88,6 +101,23 @@ void update(float dt) {
 	}
 	hexagon.va[numPoints * 6] = bx;
 	hexagon.va[numPoints * 6 + 1] = by;
+
+	for (int i = 0; i < morenum; ++i) {
+		float outa = (float)i / morenum * TAU;
+		Drawable& cur = more[i];
+		float bx = mouse.x / ww * 2.0 - 1.0 + cos(outa - bias / 5) * r * 1.2;
+		float by = (mouse.y / wh * 2.0 - 1.0) * -1.0 + sin(outa - bias / 5) * r * 1.2;
+		int nump = (i % 4) + 3;
+		float lbias = bias;
+		if (i & 1) lbias *= -1;
+		for (int n = 0; n < nump; ++n) {
+			float a = (float)n / nump * TAU + lbias;
+			cur.va[n * 6] = cos(a) * sr + bx;
+			cur.va[n * 6 + 1] = sin(a) * sr + by;
+		}
+		cur.va[nump * 6] = bx;
+		cur.va[nump * 6 + 1] = by;
+	}
 }
 
 void draw() {
@@ -127,6 +157,28 @@ int main() {
 	ea[(numPoints - 1) * 3 + 1] = 0;
 	hexagon = Drawable(va, (numPoints + 1) * 6, ea, numPoints * 3);
 
+	for (int i = 0; i < morenum; ++i) {
+		int nump = (i % 4) + 3;
+
+		float* va = new float[(nump + 1) * 6];
+		float p = (float)i / morenum;
+		for (uint32_t n = 0; n < nump + 1; ++n) {
+			va[n * 6 + 2] = color::h2cc(p * 6.0);
+			va[n * 6 + 3] = color::h2cc(p * 6.0 + 4.0);
+			va[n * 6 + 4] = color::h2cc(p * 6.0 + 8.0);
+			va[n * 6 + 5] = 1.0;
+		}
+		GLuint* ea = new GLuint[nump * 3];
+		for (uint32_t i = 0; i < nump; ++i) {
+			ea[i * 3] = i;
+			ea[i * 3 + 1] = i + 1;
+			ea[i * 3 + 2] = nump;
+		}
+		ea[(nump - 1) * 3 + 1] = 0;
+
+		more[i] = Drawable(va, (nump + 1) * 6, ea, nump * 3);
+	}
+
 	socky.msgCb = onReceive;
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = htonl(127 << 24 | 0 << 16 | 0 << 8 | 1);
@@ -157,7 +209,12 @@ int main() {
 
 			update(dt);
 
-			hexagon.addToList(vbod, ebod);
+			addArrayToList<GLuint>(ebod, hexagon.ea, hexagon.el, vbod.size() / 6);
+			addArrayToList<float>(vbod, hexagon.va, hexagon.vl, 0);
+			for (int i = 0; i < morenum; ++i) {
+				addArrayToList<GLuint>(ebod, more[i].ea, more[i].el, vbod.size() / 6);
+				addArrayToList<float>(vbod, more[i].va, more[i].vl, 0);
+			}
 			draw();
 			vbod.clear();
 			ebod.clear();

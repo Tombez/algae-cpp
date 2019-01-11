@@ -59,7 +59,7 @@ void init() {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
 	// glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-	// glfwWindowHint(GLFW_SAMPLES, 32);
+	glfwWindowHint(GLFW_SAMPLES, 4);
 	// glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 
 	GLFWmonitor* monitor = glfwGetPrimaryMonitor();
@@ -93,7 +93,7 @@ void init() {
 
 	// glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	// glEnable(GL_BLEND);
-	// glDisable(GL_MULTISAMPLE);
+	glEnable(GL_MULTISAMPLE);
 
 	const GLFWvidmode* screen = glfwGetVideoMode(glfwGetPrimaryMonitor());
 	glfwSetWindowPos(window, screen->width / 2 - ww / 2, screen->height / 2 - wh / 2);
