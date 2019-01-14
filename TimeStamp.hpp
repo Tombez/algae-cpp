@@ -3,6 +3,7 @@
 #include "./whichSystem.hpp"
 
 #include <cstdint>
+#include <cstdio>
 
 #if defined(unix)
 	#include <chrono>
@@ -31,14 +32,9 @@ public:
 		#if defined(unix)
 			return std::chrono::duration_cast<std::chrono::microseconds>(time - other.time).count();
 		#elif defined(_WIN32)
-			return time - other.time;
+			uint64_t freq;
+			QueryPerformanceFrequency((_LARGE_INTEGER*)&freq);
+			return (time - other.time) / (float)freq * 1000000;
 		#endif
 	}
-	// TimeStamp& operator=(uint32_t val) {
-	// 	#if defined(unix)
-	// 		time = std::chrono::time_point<std::chrono::high_resolution_clock>(val);
-	// 	#elif defined(_WIN32)
-	// 		time = val;
-	// 	#endif
-	// }
 };

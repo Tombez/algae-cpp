@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 
 namespace color {
 	// https://en.wikipedia.org/wiki/HSL_and_HSV#From_HSV

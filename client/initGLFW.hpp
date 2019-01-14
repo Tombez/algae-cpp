@@ -47,6 +47,7 @@ GLuint fragmentShader;
 GLuint vao;
 GLuint vbo;
 GLuint ebo;
+float refreshRate = 60.0;
 
 void init() {
 	if (!glfwInit()) {
@@ -63,18 +64,18 @@ void init() {
 	// glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 
 	GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+	GLFWvidmode* videoMode = nullptr;
 	if (monitor) {
-		const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+		videoMode = (GLFWvidmode*)glfwGetVideoMode(monitor);
 
-		// std::cout << "refresh " << mode->refreshRate << "\n";
-		// std::cout << "width " << mode->width << "\n";
-		// std::cout << "height " << mode->height << "\n";
-		glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
-		glfwWindowHint(GLFW_RED_BITS, mode->redBits);
-		glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
-		glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
-		// ww = mode->width;
-		// wh = mode->height;
+		refreshRate = videoMode->refreshRate;
+		// std::cout << "refresh " << videoMode->refreshRate << "\n";
+		// std::cout << "width " << videoMode->width << "\n";
+		// std::cout << "height " << videoMode->height << "\n";
+		glfwWindowHint(GLFW_REFRESH_RATE, videoMode->refreshRate);
+		glfwWindowHint(GLFW_RED_BITS, videoMode->redBits);
+		glfwWindowHint(GLFW_GREEN_BITS, videoMode->greenBits);
+		glfwWindowHint(GLFW_BLUE_BITS, videoMode->blueBits);
 	} else {
 		puts("primary monitor was null..\n");
 	}
@@ -95,8 +96,10 @@ void init() {
 	// glEnable(GL_BLEND);
 	glEnable(GL_MULTISAMPLE);
 
-	const GLFWvidmode* screen = glfwGetVideoMode(glfwGetPrimaryMonitor());
-	glfwSetWindowPos(window, screen->width / 2 - ww / 2, screen->height / 2 - wh / 2);
+	if (videoMode != nullptr) {
+		glfwSetWindowPos(window, videoMode->width / 2 - ww / 2,
+			videoMode->height / 2 - wh / 2);
+	}
 
 	glGenVertexArrays(1, &vao); // vertex array objects stores attribute data
 	glBindVertexArray(vao);
@@ -123,7 +126,8 @@ void init() {
 
 	GLint colAttrib = glGetAttribLocation(shaderProgram, "color");
 	glEnableVertexAttribArray(colAttrib);
-	glVertexAttribPointer(colAttrib, 4, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(2 * sizeof(float)));
+	glVertexAttribPointer(colAttrib, 4, GL_FLOAT, GL_FALSE,
+		6 * sizeof(float), (void*)(2 * sizeof(float)));
 }
 
 void cleanup () {

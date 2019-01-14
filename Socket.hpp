@@ -28,6 +28,7 @@
 	#define nfds_t ULONG
 	#define sockerr WSAGetLastError()
 	#define EWOULDBLOCK WSAEWOULDBLOCK
+	#define ECONNRESET WSAECONNRESET
 	#define close closesocket
 #endif
 
@@ -61,14 +62,19 @@ namespace sock {
 		#endif
 	}
 	typedef void (*MessageCallback)(struct sockaddr_in*, uint8_t*, uint16_t);
+	typedef bool (*ErrorCallback)(int32_t, uint8_t*);
 	class Socket {
 	public:
 		uint16_t bufferSize;
 		uint8_t *buffer;
 		int sockID;
+		ErrorCallback errCb;
 		MessageCallback msgCb;
 		struct sockaddr_in me;
-		Socket(uint16_t bufferSize) : bufferSize(bufferSize), msgCb(NULL) {
+		Socket() {}
+		Socket(uint16_t bufferSize, ErrorCallback errCb) :
+			bufferSize(bufferSize), errCb(errCb), msgCb(NULL)
+		{
 			if (!initCalled) {
 				init();
 				initCalled = true;
@@ -92,8 +98,7 @@ namespace sock {
 
 			int code = bind(sockID, (struct sockaddr*)&me, sizeof(struct sockaddr_in));
 			if (code == SOCKET_ERROR) {
-				printf("bind() failed with error code : %d", sockerr);
-				exit(EXIT_FAILURE);
+				(*errCb)(sockerr, (uint8_t*)"bind()");
 			}
 			puts("Bind done");
 		}
@@ -106,9 +111,12 @@ namespace sock {
 					if (sockerr == EWOULDBLOCK) {
 						//printf("would have blocked...\n");
 						break;
+					} else if (sockerr == ECONNRESET) {
+						// doesn't make sense to get this error from recvfrom
+						break;
 					}
-					printf("recvfrom() failed with error code : %d", sockerr);
-					exit(EXIT_FAILURE);
+					if (!(*errCb)(sockerr, (uint8_t*)"recvfrom()"))
+						break;
 				}
 				(*msgCb)(&from, buffer, uint16_t(len));
 			}
@@ -116,8 +124,7 @@ namespace sock {
 		void sendMessage(struct sockaddr_in *dest, uint8_t *message, uint16_t msgLength) {
 			int code = sendto(sockID, (char*)message, msgLength, 0, (struct sockaddr*)dest, sizeof(struct sockaddr_in));
 			if (code == SOCKET_ERROR) {
-				printf("sendto() failed with error code : %d" , sockerr);
-				exit(EXIT_FAILURE);
+				(*errCb)(sockerr, (uint8_t*)"sendto()");
 			}
 		}
 		~Socket() {

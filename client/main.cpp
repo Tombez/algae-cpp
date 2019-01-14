@@ -30,17 +30,10 @@ float by = 0.0;
 float r = 0.5;
 float sr = 0.03;
 
-TimeStamp now;
-TimeStamp prevTime;
-
-uint16_t fps = 0;
-uint32_t prevSecond = 0;
-uint32_t second = 0;
-
 std::vector<float> vbod;
 std::vector<GLuint> ebod;
 
-sock::Socket socky(1400);
+sock::Socket socky;
 struct sockaddr_in server;
 
 Drawable hexagon;
@@ -63,6 +56,14 @@ static void keyCallback(GLFWwindow* window, int key, int scancode, int action, i
 	}
 }
 
+bool onSockError(int32_t errcode, uint8_t* funcName) {
+	if (errcode == ECONNRESET) {
+		puts("server refused connection.");
+	} else {
+		printf("function %s failed with error code: %d\n", funcName, errcode);
+	}
+	// return false;
+}
 void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
 	uint8_t opcode = data[0];
 
@@ -132,9 +133,18 @@ void draw() {
 }
 
 int main() {
+	TimeStamp now;
+	TimeStamp prevTime;
+	float targetDt = 1.0;
+	uint16_t fps = 0;
+	uint32_t prevSecond = 0;
+	uint32_t second = 0;
+
 	init();
 	glfwSetKeyCallback(window, keyCallback);
 	glfwSetCursorPosCallback(window, cursorPosCallback);
+
+	std::printf("refresh rate %f\n", refreshRate);
 
 	float* va = new float[(numPoints + 1) * 6];
 	for (uint32_t i = 0; i < numPoints; ++i) {
@@ -179,6 +189,7 @@ int main() {
 		more[i] = Drawable(va, (nump + 1) * 6, ea, nump * 3);
 	}
 
+	new (&socky) sock::Socket(1400, onSockError);
 	socky.msgCb = onReceive;
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = htonl(127 << 24 | 0 << 16 | 0 << 8 | 1);
@@ -186,24 +197,23 @@ int main() {
 
 	socky.sendMessage(&server, (uint8_t*)"\x01\0", (uint16_t)2);
 
-	float targetDt = 1.0;
-
 	while(!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 		socky.processMessages();
 
 		now.refresh();
 		uint64_t dif = now - prevTime;
-		float dt = dif / 16666.0;
+		float dt = dif / (1.0 / refreshRate * 1000000);
 		if (dt >= targetDt) {
 			prevTime = now;
 			targetDt = std::max(1 - (dt - targetDt), 0.0f);
 
-			prevSecond = second;
+			// second = (now - start) / 1000000;
 			second = glfwGetTime();
 			++fps;
 			if (second != prevSecond) {
-				std::cout << "fps " << fps << "\n";
+				prevSecond = second;
+				std::printf("fps %u, second %u\n", fps, second);
 				fps = 0;
 			}
 
@@ -221,6 +231,7 @@ int main() {
 		}
 	}
 
+	socky.sendMessage(&server, (uint8_t*)"\x02\0", (uint16_t)2);
 	cleanup();
 	return 0;
 }
