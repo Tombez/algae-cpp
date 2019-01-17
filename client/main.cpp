@@ -2,6 +2,8 @@
 #include "../Geometry.hpp"
 #include "../colorUtils.hpp"
 #include "../Socket.hpp"
+#include "../opcodes.hpp"
+#include "../Buffer.hpp"
 #include "./initGLFW.hpp"
 #include "./Drawable.hpp"
 
@@ -17,7 +19,7 @@
 #include <vector>
 #include <algorithm>
 
-const float PI = 3.14159265358979323846;
+const float PI = 3.1415926;
 const float TAU = 2 * PI;
 const int numPoints = 6;
 
@@ -40,6 +42,9 @@ Drawable hexagon;
 const int morenum = 60;
 Drawable more[morenum];
 
+Buffer toServer(1400);
+uint8_t keys = 0;
+
 static void cursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
 	prev = mouse;
 	mouse.x = (float)xpos;
@@ -50,9 +55,18 @@ static void keyCallback(GLFWwindow* window, int key, int scancode, int action, i
 		return;
 
 	switch (key) {
-		case GLFW_KEY_ESCAPE:
+		case GLFW_KEY_ESCAPE: {
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 			break;
+		}
+		case GLFW_KEY_SPACE: {
+			keys |= opcodes::client::actions::split;
+			break;
+		}
+		case GLFW_KEY_W: {
+			keys |= opcodes::client::actions::eject;
+			break;
+		}
 	}
 }
 
@@ -65,19 +79,29 @@ bool onSockError(int32_t errcode, uint8_t* funcName) {
 	// return false;
 }
 void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
-	uint8_t opcode = data[0];
+	Buffer buf;
+	buf.index = 0;
+	buf.size = dataLen;
+	buf.data = data;
+	uint8_t opcode = buf.read<uint8_t>();
 
 	switch (opcode) {
-		case 1: // accepted connection
-			puts("connection accepted");
+		case opcodes::server::connectAccept: {
+			std::puts("connection accepted");
 			break;
-		case 2: // error
-			printf("error response from server: %s\n", data + 1 * sizeof(uint8_t));
+		}
+		case opcodes::server::error: {
+			uint8_t* desc = buf.read<uint8_t*>();
+			std::printf("error response from server: %s\n", desc);
+			delete desc;
 			break;
-		case 3: // world update
-			puts("world update");
+		}
+		case opcodes::server::worldUpdate: {
+			// std::puts("world update");
 			break;
+		}
 	}
+	buf.data = nullptr;
 }
 template<typename T>
 void addArrayToList(std::vector<T>& list, T* arr, uint32_t len, uint32_t off) {
@@ -92,9 +116,18 @@ void addArrayToList(std::vector<T>& list, T* arr, uint32_t len, uint32_t off) {
 		list.push_back(arr[i] + off);
 }
 void update(float dt) {
-	bias += 0.02 * dt;
 	bx = mouse.x / ww * 2.0 - 1.0;
 	by = (mouse.y / wh * 2.0 - 1.0) * -1.0;
+
+	toServer.index = 0;
+	toServer.write<uint8_t>(opcodes::client::input);
+	toServer.write<float>(bx);
+	toServer.write<float>(by);
+	toServer.write<uint8_t>(keys);
+	keys = 0;
+	socky.sendMessage(&server, toServer.data, toServer.index);
+
+	bias += 0.02 * dt;
 	for (int i = 0; i < numPoints; ++i) {
 		float a = (float)i / numPoints * TAU + bias;
 		hexagon.va[i * 6] = cos(a) * r + bx;
@@ -195,7 +228,10 @@ int main() {
 	server.sin_addr.s_addr = htonl(127 << 24 | 0 << 16 | 0 << 8 | 1);
 	server.sin_port = htons((uint16_t)49152);
 
-	socky.sendMessage(&server, (uint8_t*)"\x01\0", (uint16_t)2);
+	toServer.index = 0;
+	toServer.write<uint8_t>(opcodes::client::connectReq);
+	toServer.write<uint8_t>(0x0);
+	socky.sendMessage(&server, toServer.data, toServer.index);
 
 	while(!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -231,7 +267,10 @@ int main() {
 		}
 	}
 
-	socky.sendMessage(&server, (uint8_t*)"\x02\0", (uint16_t)2);
+	toServer.index = 0;
+	toServer.write<uint8_t>(opcodes::client::disconnect);
+	toServer.write<uint8_t>(0x0);
+	socky.sendMessage(&server, toServer.data, toServer.index);
 	cleanup();
 	return 0;
 }
