@@ -6,8 +6,8 @@
 #include "../Geometry.hpp"
 #include "../Random.hpp"
 #include "../LooseQuadTree.hpp"
-#include "./IDGenerator.hpp"
-#include "./HashTable.hpp"
+#include "../IDGenerator.hpp"
+#include "../HashTable.hpp"
 
 #if defined(unix)
 #elif defined (_WIN32)
