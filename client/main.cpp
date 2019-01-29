@@ -97,7 +97,36 @@ void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
 			break;
 		}
 		case opcodes::server::worldUpdate: {
-			// std::puts("world update");
+			uint16_t eatCount = buf.read<uint16_t>();
+			for (uint16_t i = 0; i < eatCount; ++i) {
+				uint32_t eaterID = buf.read<uint32_t>();
+				uint32_t eatenID = buf.read<uint32_t>();
+				// TODO: handle eaten
+			}
+			uint16_t updateCount = buf.read<uint16_t>();
+			std::printf("update count: %u\n", updateCount);
+			for (uint16_t i = 0; i < updateCount; ++i) {
+				uint32_t cellID = buf.read<uint32_t>();
+				float x = buf.read<float>();
+				float y = buf.read<float>();
+				float r = buf.read<float>();
+				uint8_t readFlags = buf.read<uint8_t>();
+				uint8_t cellType = 0;
+				uint8_t* name = nullptr;
+				uint8_t* skin = nullptr;
+				if (readFlags & opcodes::server::readFlags::type) {
+					cellType = buf.read<uint8_t>();
+				}
+				if (readFlags & opcodes::server::readFlags::name) {
+					name = buf.read<uint8_t*>();
+				}
+				if (readFlags & opcodes::server::readFlags::skin) {
+					skin = buf.read<uint8_t*>();
+				}
+				// TODO: create cells
+				delete name;
+				delete skin;
+			}
 			break;
 		}
 	}

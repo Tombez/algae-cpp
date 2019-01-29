@@ -30,6 +30,13 @@ public:
 			data[index] = (val >> i * 8) & 0xff; // do I need the & 0xff?
 		}
 	}
+	template<typename T>
+	void writeAt(T val, uint16_t i) {
+		uint16_t realIndex = index;
+		index = i;
+		this->write<T>(val);
+		index = realIndex;
+	}
 	~Buffer() {
 		delete data;
 	}
