@@ -40,24 +40,27 @@ public:
 	uint32_t findFrom(uint32_t i, CB callback) {
 		assert(i < size);
 		uint32_t end = i;
+		uint32_t mask = size - 1;
 		do {
 			if (callback(data[i])) {
 				return i;
 			}
-			i = (i + 1) & (size - 1);
+			i = (i + 1) & mask;
 		} while (i != end);
 		return size;
 	}
 	uint32_t find(uint32_t id) {
 		uint32_t i = hash(id);
-		uint32_t end = (i + size - 1) & (size - 1);
-		for (; i != end; i = (i + 1) & (size - 1)) {
+		uint32_t end = i;
+		uint32_t mask = size - 1;
+		do {
 			if (data[i].id == id) {
 				return i;
 			} else if (data[i].id == unusedID) {
 				return unusedID;
 			}
-		}
+			i = (i + 1) & mask;
+		} while (i != end);
 		std::puts("Impossibility of HashTable being full while finding.");
 		assert(false);
 	}
@@ -69,14 +72,14 @@ public:
 			changeSize(size * 2);
 		}
 		++length;
-		uint32_t i = hash(id);
-		uint32_t end = (i + size - 1) & (size - 1);
-		for (; i != end; i = (i + 1) & (size - 1)) {
-			if (data[i].id == unusedID) {
-				data[i].id = id;
-				data[i].payload = item;
-				return;
-			}
+		uint32_t i = findFrom(hash(id), [&](TableNode<T> &node)->bool {
+			return node.id == unusedID;
+		});
+		if (i != size) {
+			TableNode<T> &node = data[i];
+			node.id = id;
+			node.payload = item;
+			return;
 		}
 		std::puts("Impossibility of HashTable being full while inserting.");
 		assert(false);
@@ -102,14 +105,13 @@ public:
 		std::puts("Impossibility of HashTable being full while removing.");
 		assert(false);
 	}
-	T read(uint32_t id) {
+	TableNode<T> read(uint32_t id) {
 		uint32_t i = find(id);
-		T node;
-		if (i == unusedID) {
-			node.id = unusedID;
-		} else {
-			node = data[i];
+		if (i != unusedID) {
+			return data[i];
 		}
+		TableNode<T> node;
+		node.id = unusedID;
 		return node;
 	}
 	void changeSize(uint32_t newSize) {

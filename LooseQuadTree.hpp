@@ -26,7 +26,7 @@ public:
 			}
 			rhs.hasSplit = false;
 		}
-	};
+	}
 	~QuadBranch() {
 		if (hasSplit) {
 			for (uint8_t i = 0; i < 4; ++i) { // compiler unroll?
@@ -45,7 +45,7 @@ public:
 			return child;
 		}
 		return this;
-	};
+	}
 };
 
 template<class T>

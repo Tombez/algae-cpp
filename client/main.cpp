@@ -4,6 +4,9 @@
 #include "../Socket.hpp"
 #include "../opcodes.hpp"
 #include "../Buffer.hpp"
+#include "../IDGenerator.hpp"
+#include "../HashTable.hpp"
+#include "../Cell.hpp"
 #include "./initGLFW.hpp"
 #include "./Drawable.hpp"
 
@@ -18,19 +21,16 @@
 #include <cstdint>
 #include <vector>
 #include <algorithm>
+#include <memory>
 
 const float PI = 3.1415926;
 const float TAU = 2 * PI;
-const int numPoints = 6;
 
 Point mouse(0, 0);
 Point prev(0, 0);
 
-float bias = 0.0;
 float bx = 0.0;
 float by = 0.0;
-float r = 0.5;
-float sr = 0.03;
 
 std::vector<float> vbod;
 std::vector<GLuint> ebod;
@@ -38,12 +38,9 @@ std::vector<GLuint> ebod;
 sock::Socket socky;
 struct sockaddr_in server;
 
-Drawable hexagon;
-const int morenum = 60;
-Drawable more[morenum];
-
 Buffer toServer(1400);
 uint8_t keys = 0;
+HashTable<Cell*> cellsByID;
 
 static void cursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
 	prev = mouse;
@@ -70,7 +67,7 @@ static void keyCallback(GLFWwindow* window, int key, int scancode, int action, i
 	}
 }
 
-bool onSockError(int32_t errcode, uint8_t* funcName) {
+bool onSockError(int32_t errcode, const char* funcName) {
 	if (errcode == ECONNRESET) {
 		puts("server refused connection.");
 	} else {
@@ -78,11 +75,7 @@ bool onSockError(int32_t errcode, uint8_t* funcName) {
 	}
 	// return false;
 }
-void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
-	Buffer buf;
-	buf.index = 0;
-	buf.size = dataLen;
-	buf.data = data;
+void onReceive(struct sockaddr_in *from, Buffer& buf) {
 	uint8_t opcode = buf.read<uint8_t>();
 
 	switch (opcode) {
@@ -91,9 +84,8 @@ void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
 			break;
 		}
 		case opcodes::server::error: {
-			uint8_t* desc = buf.read<uint8_t*>();
-			std::printf("error response from server: %s\n", desc);
-			delete desc;
+			std::string desc = buf.read<std::string>();
+			std::printf("error response from server: %s\n", desc.c_str());
 			break;
 		}
 		case opcodes::server::worldUpdate: {
@@ -104,7 +96,7 @@ void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
 				// TODO: handle eaten
 			}
 			uint16_t updateCount = buf.read<uint16_t>();
-			std::printf("update count: %u\n", updateCount);
+			// std::printf("update count: %u\n", updateCount);
 			for (uint16_t i = 0; i < updateCount; ++i) {
 				uint32_t cellID = buf.read<uint32_t>();
 				float x = buf.read<float>();
@@ -112,25 +104,32 @@ void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
 				float r = buf.read<float>();
 				uint8_t readFlags = buf.read<uint8_t>();
 				uint8_t cellType = 0;
-				uint8_t* name = nullptr;
-				uint8_t* skin = nullptr;
+				std::string name;
+				std::string skin;
 				if (readFlags & opcodes::server::readFlags::type) {
 					cellType = buf.read<uint8_t>();
 				}
 				if (readFlags & opcodes::server::readFlags::name) {
-					name = buf.read<uint8_t*>();
+					name = buf.read<std::string>();
 				}
 				if (readFlags & opcodes::server::readFlags::skin) {
-					skin = buf.read<uint8_t*>();
+					skin = buf.read<std::string>();
 				}
-				// TODO: create cells
-				delete name;
-				delete skin;
+				TableNode<Cell*> node = cellsByID.read(cellID);
+				Cell* cell;
+				if (node.id == unusedID) {
+					cell = new Cell(x, y, r, cellID, cellType);
+					cellsByID.insert(cellID, cell);
+				} else {
+					cell = node.payload;
+					cell->x = x / 260; // divisions are temporary
+					cell->y = y / 260;
+					cell->r = r / 100;
+				}
 			}
 			break;
 		}
 	}
-	buf.data = nullptr;
 }
 template<typename T>
 void addArrayToList(std::vector<T>& list, T* arr, uint32_t len, uint32_t off) {
@@ -144,43 +143,48 @@ void addArrayToList(std::vector<T>& list, T* arr, uint32_t len, uint32_t off) {
 	for (uint32_t i = 0; i < len; ++i)
 		list.push_back(arr[i] + off);
 }
+void addCellToList(std::vector<float>& vbod, std::vector<GLuint>& ebod, Cell* cell) { // temporary function
+	uint8_t numPoints = 16;
+	size_t offset = vbod.size() / 6;
+	vbod.push_back(cell->x);
+	vbod.push_back(cell->y);
+	vbod.push_back(1.0);
+	vbod.push_back(0.0);
+	vbod.push_back(0.0);
+	vbod.push_back(1.0);
+	for (uint16_t i = 0; i < numPoints; ++i) {
+		float angle = (float)i / numPoints * TAU;
+		vbod.push_back(cell->x + cos(angle) * cell->r);
+		vbod.push_back(cell->y + sin(angle) * cell->r);
+		vbod.push_back(1.0);
+		vbod.push_back(0.0);
+		vbod.push_back(0.0);
+		vbod.push_back(1.0);
+	}
+	for (uint16_t i = 2; i <= numPoints; ++i) {
+		ebod.push_back(offset + i - 1);
+		ebod.push_back(offset + i);
+		ebod.push_back(offset);
+	}
+	ebod.push_back(offset + numPoints);
+	ebod.push_back(offset + 1);
+	ebod.push_back(offset);
+}
 void update(float dt) {
 	bx = mouse.x / ww * 2.0 - 1.0;
 	by = (mouse.y / wh * 2.0 - 1.0) * -1.0;
 
-	toServer.index = 0;
+	toServer.setIndex(0);
 	toServer.write<uint8_t>(opcodes::client::input);
 	toServer.write<float>(bx);
 	toServer.write<float>(by);
 	toServer.write<uint8_t>(keys);
 	keys = 0;
-	socky.sendMessage(&server, toServer.data, toServer.index);
+	socky.sendMessage(&server, toServer);
 
-	bias += 0.02 * dt;
-	for (int i = 0; i < numPoints; ++i) {
-		float a = (float)i / numPoints * TAU + bias;
-		hexagon.va[i * 6] = cos(a) * r + bx;
-		hexagon.va[i * 6 + 1] = sin(a) * r + by;
-	}
-	hexagon.va[numPoints * 6] = bx;
-	hexagon.va[numPoints * 6 + 1] = by;
-
-	for (int i = 0; i < morenum; ++i) {
-		float outa = (float)i / morenum * TAU;
-		Drawable& cur = more[i];
-		float bx = mouse.x / ww * 2.0 - 1.0 + cos(outa - bias / 5) * r * 1.2;
-		float by = (mouse.y / wh * 2.0 - 1.0) * -1.0 + sin(outa - bias / 5) * r * 1.2;
-		int nump = (i % 4) + 3;
-		float lbias = bias;
-		if (i & 1) lbias *= -1;
-		for (int n = 0; n < nump; ++n) {
-			float a = (float)n / nump * TAU + lbias;
-			cur.va[n * 6] = cos(a) * sr + bx;
-			cur.va[n * 6 + 1] = sin(a) * sr + by;
-		}
-		cur.va[nump * 6] = bx;
-		cur.va[nump * 6 + 1] = by;
-	}
+	cellsByID.forEach([&](TableNode<Cell*>* node)->void {
+		addCellToList(vbod, ebod, node->payload);
+	});
 }
 
 void draw() {
@@ -208,59 +212,16 @@ int main() {
 
 	std::printf("refresh rate %f\n", refreshRate);
 
-	float* va = new float[(numPoints + 1) * 6];
-	for (uint32_t i = 0; i < numPoints; ++i) {
-		float p = (float)i / numPoints;
-		va[i * 6 + 2] = color::h2cc(p * 6.0);
-		va[i * 6 + 3] = color::h2cc(p * 6.0 + 4.0);
-		va[i * 6 + 4] = color::h2cc(p * 6.0 + 8.0);
-		va[i * 6 + 5] = 1.0;
-	}
-	va[numPoints * 6 + 2] = 0.5;
-	va[numPoints * 6 + 3] = 0.5;
-	va[numPoints * 6 + 4] = 0.5;
-	va[numPoints * 6 + 5] = 1.0;
-	GLuint* ea = new GLuint[numPoints * 3];
-	for (uint32_t i = 0; i < numPoints; ++i) {
-		ea[i * 3] = i;
-		ea[i * 3 + 1] = i + 1;
-		ea[i * 3 + 2] = numPoints;
-	}
-	ea[(numPoints - 1) * 3 + 1] = 0;
-	hexagon = Drawable(va, (numPoints + 1) * 6, ea, numPoints * 3);
-
-	for (int i = 0; i < morenum; ++i) {
-		int nump = (i % 4) + 3;
-
-		float* va = new float[(nump + 1) * 6];
-		float p = (float)i / morenum;
-		for (uint32_t n = 0; n < nump + 1; ++n) {
-			va[n * 6 + 2] = color::h2cc(p * 6.0);
-			va[n * 6 + 3] = color::h2cc(p * 6.0 + 4.0);
-			va[n * 6 + 4] = color::h2cc(p * 6.0 + 8.0);
-			va[n * 6 + 5] = 1.0;
-		}
-		GLuint* ea = new GLuint[nump * 3];
-		for (uint32_t i = 0; i < nump; ++i) {
-			ea[i * 3] = i;
-			ea[i * 3 + 1] = i + 1;
-			ea[i * 3 + 2] = nump;
-		}
-		ea[(nump - 1) * 3 + 1] = 0;
-
-		more[i] = Drawable(va, (nump + 1) * 6, ea, nump * 3);
-	}
-
 	new (&socky) sock::Socket(1400, onSockError);
 	socky.msgCb = onReceive;
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = htonl(127 << 24 | 0 << 16 | 0 << 8 | 1);
 	server.sin_port = htons((uint16_t)49152);
 
-	toServer.index = 0;
+	toServer.setIndex(0);
 	toServer.write<uint8_t>(opcodes::client::connectReq);
 	toServer.write<uint8_t>(0x0);
-	socky.sendMessage(&server, toServer.data, toServer.index);
+	socky.sendMessage(&server, toServer);
 
 	while(!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -284,22 +245,22 @@ int main() {
 
 			update(dt);
 
-			addArrayToList<GLuint>(ebod, hexagon.ea, hexagon.el, vbod.size() / 6);
-			addArrayToList<float>(vbod, hexagon.va, hexagon.vl, 0);
-			for (int i = 0; i < morenum; ++i) {
-				addArrayToList<GLuint>(ebod, more[i].ea, more[i].el, vbod.size() / 6);
-				addArrayToList<float>(vbod, more[i].va, more[i].vl, 0);
-			}
+			// addArrayToList<GLuint>(ebod, hexagon.ea, hexagon.el, vbod.size() / 6);
+			// addArrayToList<float>(vbod, hexagon.va, hexagon.vl, 0);
+			// for (int i = 0; i < morenum; ++i) {
+			// 	addArrayToList<GLuint>(ebod, more[i].ea, more[i].el, vbod.size() / 6);
+			// 	addArrayToList<float>(vbod, more[i].va, more[i].vl, 0);
+			// }
 			draw();
 			vbod.clear();
 			ebod.clear();
 		}
 	}
 
-	toServer.index = 0;
+	toServer.setIndex(0);
 	toServer.write<uint8_t>(opcodes::client::disconnect);
 	toServer.write<uint8_t>(0x0);
-	socky.sendMessage(&server, toServer.data, toServer.index);
+	socky.sendMessage(&server, toServer);
 	cleanup();
 	return 0;
 }

@@ -8,6 +8,7 @@
 #include "../LooseQuadTree.hpp"
 #include "../IDGenerator.hpp"
 #include "../HashTable.hpp"
+#include "../Cell.hpp"
 
 #if defined(unix)
 #elif defined (_WIN32)
@@ -21,15 +22,6 @@
 #include <algorithm>
 
 class Player;
-
-class Cell : public Circle {
-public:
-	uint32_t id;
-	uint8_t type;
-	Cell() {}
-	Cell(float x, float y, float r, uint32_t id, uint8_t type = 0) :
-		Circle(x, y, r), id(id), type(type) {}
-};
 
 class PlayerCell : public Cell {
 public:
@@ -46,10 +38,9 @@ public:
 	// uint32_t id; // I don't think players need ids
 	std::vector<Cell*> cells;
 	HashTable<uint8_t> cellSet;
-	uint8_t* name;
-	uint8_t* skin;
-	Player(uint32_t ip, uint16_t port) : ip(ip), port(port),
-		name(nullptr), skin(nullptr) {}
+	std::string name;
+	std::string skin;
+	Player(uint32_t ip, uint16_t port) : ip(ip), port(port) {}
 };
 
 const uint16_t PORT = 49152;
@@ -79,15 +70,10 @@ IDGenerator idGen;
 uint32_t frame = 0;
 HashTable<Cell*> cellsByID;
 
-bool onSockError(int32_t errcode, uint8_t* funcName) {
+bool onSockError(int32_t errcode, const char* funcName) {
 	std::printf("function %s failed with error code: %d\n", funcName, errcode);
 }
-void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
-	Buffer buf;
-	buf.index = 0;
-	buf.size = dataLen;
-	buf.data = data;
-
+void onReceive(struct sockaddr_in *from, Buffer &buf) {
 	uint8_t opcode = buf.read<uint8_t>();
 	// std::printf("message from %s:%u , opcode %u\n",
 	// 	inet_ntoa(from->sin_addr), ntohs(from->sin_port), opcode);
@@ -97,15 +83,15 @@ void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
 			if (players.size() < MAX_PLAYERS) {
 				std::puts("creating new client");
 				players.emplace_back(from->sin_addr.s_addr, from->sin_port);
-				toClient.index = 0;
+				toClient.setIndex(0);
 				toClient.write<uint8_t>(opcodes::server::connectAccept);
 				toClient.write<uint8_t>(0x0);
-				socky.sendMessage(from, toClient.data, toClient.index);
+				socky.sendMessage(from, toClient);
 			} else {
-				toClient.index = 0;
+				toClient.setIndex(0);
 				toClient.write<uint8_t>(opcodes::server::error);
-				toClient.write<uint8_t*>((uint8_t*)"server already full");
-				socky.sendMessage(from, toClient.data, toClient.index);
+				toClient.write<std::string>(std::string("server already full"));
+				socky.sendMessage(from, toClient);
 			}
 			break;
 		}
@@ -134,8 +120,11 @@ void onReceive(struct sockaddr_in *from, uint8_t *data, uint16_t dataLen) {
 			}
 			break;
 		}
+		default: {
+			printf("unknown opcode %u\n", opcode);
+			break;
+		}
 	}
-	buf.data = nullptr;
 }
 
 void update(float dt) {
@@ -171,7 +160,7 @@ void update(float dt) {
 		}
 		std::vector<Cell*> onScreen = qt.getVerletList(view);
 
-		toClient.index = 0;
+		toClient.setIndex(0);
 		toClient.write<uint8_t>(opcodes::server::worldUpdate);
 
 		toClient.write<uint16_t>(0x0); // eat count
@@ -187,7 +176,7 @@ void update(float dt) {
 			toClient.write<float>(cell->x);
 			toClient.write<float>(cell->y);
 			toClient.write<float>(cell->r);
-			uint16_t readFlagsIndex = toClient.index;
+			uint16_t readFlagsIndex = toClient.getIndex();
 			uint8_t readFlags = 0;
 			toClient.write<uint8_t>(readFlags);
 			if (!player.cellSet.has(cell->id)) {
@@ -195,13 +184,13 @@ void update(float dt) {
 				toClient.write<uint8_t>(cell->type);
 				if (cell->type == opcodes::cellType::player) {
 					PlayerCell* cell = (PlayerCell*)cell;
-					if (cell->parent->name != nullptr) {
+					if (!cell->parent->name.empty()) {
 						readFlags |= opcodes::server::readFlags::name;
-						toClient.write<uint8_t*>(cell->parent->name);
+						toClient.write<std::string>(cell->parent->name);
 					}
-					if (cell->parent->skin != nullptr) {
+					if (!cell->parent->skin.empty()) {
 						readFlags |= opcodes::server::readFlags::skin;
-						toClient.write<uint8_t*>(cell->parent->skin);
+						toClient.write<std::string>(cell->parent->skin);
 					}
 				}
 			}
@@ -211,7 +200,7 @@ void update(float dt) {
 		// toClient.writeAt<uint16_t>(updateCount, updateCountIndex);
 
 		uint16_t disappearCount = 0;
-		uint16_t disappearCountIndex = toClient.index;
+		uint16_t disappearCountIndex = toClient.getIndex();
 		toClient.write<uint16_t>(disappearCount);
 		player.cellSet.forEach([&](TableNode<uint8_t>* node) {
 			if (node->payload != localFrame) {
@@ -225,7 +214,7 @@ void update(float dt) {
 		});
 
 		toClient.write<uint8_t>(0x0); // end of message
-		socky.sendMessage(&dest, toClient.data, toClient.index);
+		socky.sendMessage(&dest, toClient);
 	}
 	qt.clear();
 	// TODO: remove dead cells

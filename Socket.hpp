@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./whichSystem.hpp"
+#include "./Buffer.hpp"
 
 #include <cstdlib>
 #include <cstdio>
@@ -61,25 +62,23 @@ namespace sock {
 			}
 		#endif
 	}
-	typedef void (*MessageCallback)(struct sockaddr_in*, uint8_t*, uint16_t);
-	typedef bool (*ErrorCallback)(int32_t, uint8_t*);
+	typedef void (*MessageCallback)(struct sockaddr_in*, Buffer&);
+	typedef bool (*ErrorCallback)(int32_t, const char*);
 	class Socket {
 	public:
-		uint16_t bufferSize;
-		uint8_t *buffer;
+		Buffer buf;
 		int sockID;
 		ErrorCallback errCb;
 		MessageCallback msgCb;
 		struct sockaddr_in me;
 		Socket() {}
 		Socket(uint16_t bufferSize, ErrorCallback errCb) :
-			bufferSize(bufferSize), errCb(errCb), msgCb(NULL)
+			buf(bufferSize), errCb(errCb), msgCb(nullptr)
 		{
 			if (!initCalled) {
 				init();
 				initCalled = true;
 			}
-			buffer = new uint8_t[bufferSize];
 			sockID = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 			if (sockID == SOCKET_ERROR) {
 				printf("socket() failed with error code : %d", sockerr);
@@ -98,7 +97,7 @@ namespace sock {
 
 			int code = bind(sockID, (struct sockaddr*)&me, sizeof(struct sockaddr_in));
 			if (code == SOCKET_ERROR) {
-				(*errCb)(sockerr, (uint8_t*)"bind()");
+				(*errCb)(sockerr, "bind()");
 			}
 			puts("Bind done");
 		}
@@ -106,7 +105,7 @@ namespace sock {
 			struct sockaddr_in from;
 			while(true) {
 				socklen_t slen = sizeof(struct sockaddr_in);
-				int len = recvfrom(sockID, (char*)buffer, bufferSize, 0, (struct sockaddr*)&from, &slen);
+				int len = recvfrom(sockID, *((void**)&buf.data), buf.data.getCapacity(), 0, (struct sockaddr*)&from, &slen);
 				if (len == SOCKET_ERROR) {
 					if (sockerr == EWOULDBLOCK) {
 						//printf("would have blocked...\n");
@@ -115,16 +114,18 @@ namespace sock {
 						// doesn't make sense to get this error from recvfrom
 						break;
 					}
-					if (!(*errCb)(sockerr, (uint8_t*)"recvfrom()"))
+					if (!(*errCb)(sockerr, "recvfrom()"))
 						break;
 				}
-				(*msgCb)(&from, buffer, uint16_t(len));
+				buf.data.setLength(len);
+				buf.setIndex(0);
+				(*msgCb)(&from, buf);
 			}
 		}
-		void sendMessage(struct sockaddr_in *dest, uint8_t *message, uint16_t msgLength) {
-			int code = sendto(sockID, (char*)message, msgLength, 0, (struct sockaddr*)dest, sizeof(struct sockaddr_in));
+		void sendMessage(struct sockaddr_in *dest, Buffer& buf) {
+			int code = sendto(sockID, *((void**)&buf.data), buf.getIndex(), 0, (struct sockaddr*)dest, sizeof(struct sockaddr_in));
 			if (code == SOCKET_ERROR) {
-				(*errCb)(sockerr, (uint8_t*)"sendto()");
+				(*errCb)(sockerr, "sendto()");
 			}
 		}
 		~Socket() {
