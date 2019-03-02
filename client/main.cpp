@@ -6,9 +6,10 @@
 #include "../Buffer.hpp"
 #include "../IDGenerator.hpp"
 #include "../HashTable.hpp"
-#include "../Cell.hpp"
+#include "../Random.hpp"
 #include "./initGLFW.hpp"
 #include "./Drawable.hpp"
+#include "./CellColored.hpp"
 
 // #if defined(unix)
 // #elif defined (_WIN32)
@@ -40,7 +41,8 @@ struct sockaddr_in server;
 
 Buffer toServer(1400);
 uint8_t keys = 0;
-HashTable<Cell*> cellsByID;
+HashTable<CellColored*> cellsByID;
+Random prng;
 
 static void cursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
 	prev = mouse;
@@ -115,10 +117,11 @@ void onReceive(struct sockaddr_in *from, Buffer& buf) {
 				if (readFlags & opcodes::server::readFlags::skin) {
 					skin = buf.read<std::string>();
 				}
-				TableNode<Cell*> node = cellsByID.read(cellID);
-				Cell* cell;
+				TableNode<CellColored*> node = cellsByID.read(cellID);
+				CellColored* cell;
 				if (node.id == unusedID) {
-					cell = new Cell(x, y, r, cellID, cellType);
+					cell = new CellColored(x, y, r, cellID, cellType,
+						color::hueToColor(prng()));
 					cellsByID.insert(cellID, cell);
 				} else {
 					cell = node.payload;
@@ -143,23 +146,23 @@ void addArrayToList(std::vector<T>& list, T* arr, uint32_t len, uint32_t off) {
 	for (uint32_t i = 0; i < len; ++i)
 		list.push_back(arr[i] + off);
 }
-void addCellToList(std::vector<float>& vbod, std::vector<GLuint>& ebod, Cell* cell) { // temporary function
+void addCellToList(std::vector<float>& vbod, std::vector<GLuint>& ebod, CellColored* cell) { // temporary function
 	uint8_t numPoints = 16;
 	size_t offset = vbod.size() / 6;
 	vbod.push_back(cell->x);
 	vbod.push_back(cell->y);
-	vbod.push_back(1.0);
-	vbod.push_back(0.0);
-	vbod.push_back(0.0);
-	vbod.push_back(1.0);
+	vbod.push_back((float)(cell->color >> 24));
+	vbod.push_back((float)(cell->color >> 16 & 0xff));
+	vbod.push_back((float)(cell->color >> 8 & 0xff));
+	vbod.push_back((float)(cell->color & 0xff));
 	for (uint16_t i = 0; i < numPoints; ++i) {
 		float angle = (float)i / numPoints * TAU;
 		vbod.push_back(cell->x + cos(angle) * cell->r);
 		vbod.push_back(cell->y + sin(angle) * cell->r);
-		vbod.push_back(1.0);
-		vbod.push_back(0.0);
-		vbod.push_back(0.0);
-		vbod.push_back(1.0);
+		vbod.push_back((float)(cell->color >> 24));
+		vbod.push_back((float)(cell->color >> 16 & 0xff));
+		vbod.push_back((float)(cell->color >> 8 & 0xff));
+		vbod.push_back((float)(cell->color & 0xff));
 	}
 	for (uint16_t i = 2; i <= numPoints; ++i) {
 		ebod.push_back(offset + i - 1);
@@ -182,7 +185,7 @@ void update(float dt) {
 	keys = 0;
 	socky.sendMessage(&server, toServer);
 
-	cellsByID.forEach([&](TableNode<Cell*>* node)->void {
+	cellsByID.forEach([&](TableNode<CellColored*>* node)->void {
 		addCellToList(vbod, ebod, node->payload);
 	});
 }

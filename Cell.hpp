@@ -1,3 +1,5 @@
+#pragma once
+
 #include "./Geometry.hpp"
 
 class Cell : public Circle {

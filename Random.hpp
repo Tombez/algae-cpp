@@ -25,4 +25,7 @@ public:
 	T operator()(T min, T max) {
 		return rand(rng) * (max - min) + min;
 	}
+	float operator()() {
+		return rand(rng);
+	}
 };

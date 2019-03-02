@@ -32,7 +32,6 @@ public:
 		id = glCreateProgram();
 		glAttachShader(id, vert.id);
 		glAttachShader(id, frag.id);
-		glBindFragDataLocation(id, 0, "outColor");
 		glLinkProgram(id);
 		glUseProgram(id);
 
