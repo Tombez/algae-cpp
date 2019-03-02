@@ -234,7 +234,6 @@ int main() {
 			prevTime = now;
 			targetDt = std::max(1 - (dt - targetDt), 0.0f);
 
-			// second = (now - start) / 1000000;
 			second = glfwGetTime();
 			++fps;
 			if (second != prevSecond) {
@@ -244,13 +243,6 @@ int main() {
 			}
 
 			update(dt);
-
-			// addArrayToList<GLuint>(ebod, hexagon.ea, hexagon.el, vbod.size() / 6);
-			// addArrayToList<float>(vbod, hexagon.va, hexagon.vl, 0);
-			// for (int i = 0; i < morenum; ++i) {
-			// 	addArrayToList<GLuint>(ebod, more[i].ea, more[i].el, vbod.size() / 6);
-			// 	addArrayToList<float>(vbod, more[i].va, more[i].vl, 0);
-			// }
 			draw();
 			vbod.clear();
 			ebod.clear();
