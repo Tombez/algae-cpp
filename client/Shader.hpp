@@ -31,7 +31,7 @@ public:
 			char* buffer = new char[bufSize];
 			glGetShaderInfoLog(id, bufSize, NULL, buffer);
 			printf("%u shader compilation error: %s\n", type, buffer);
-			delete buffer;
+			delete[] buffer;
 		}
 	}
 	~Shader() {

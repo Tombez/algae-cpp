@@ -36,6 +36,9 @@ public:
 		size = 2;
 		data = new TableNode<T>[size];
 	}
+	~HashTable() {
+		delete[] data;
+	}
 	template<class CB>
 	uint32_t findFrom(uint32_t i, CB callback) {
 		assert(i < size);
@@ -125,7 +128,7 @@ public:
 				insert(oldData[i].id, oldData[i].payload);
 			}
 		}
-		delete oldData;
+		delete[] oldData;
 	}
 	uint32_t hash(uint32_t id) {
 		return id / (uint32_t)(~((uint32_t)0) / (double)size);
