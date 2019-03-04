@@ -105,7 +105,7 @@ namespace sock {
 			struct sockaddr_in from;
 			while(true) {
 				socklen_t slen = sizeof(struct sockaddr_in);
-				int len = recvfrom(sockID, *((void**)&buf.data), buf.data.getCapacity(), 0, (struct sockaddr*)&from, &slen);
+				int len = recvfrom(sockID, *((char**)&buf.data), buf.data.getCapacity(), 0, (struct sockaddr*)&from, &slen);
 				if (len == SOCKET_ERROR) {
 					if (sockerr == EWOULDBLOCK) {
 						//printf("would have blocked...\n");
@@ -123,7 +123,7 @@ namespace sock {
 			}
 		}
 		void sendMessage(struct sockaddr_in *dest, Buffer& buf) {
-			int code = sendto(sockID, *((void**)&buf.data), buf.getIndex(), 0, (struct sockaddr*)dest, sizeof(struct sockaddr_in));
+			int code = sendto(sockID, *((const char**)&buf.data), buf.getIndex(), 0, (struct sockaddr*)dest, sizeof(struct sockaddr_in));
 			if (code == SOCKET_ERROR) {
 				(*errCb)(sockerr, "sendto()");
 			}
