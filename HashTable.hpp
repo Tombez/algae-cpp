@@ -87,12 +87,12 @@ public:
 		std::puts("Impossibility of HashTable being full while inserting.");
 		assert(false);
 	}
-	T remove(uint32_t id) {
+	TableNode<T> remove(uint32_t id) {
 		if ((float)(length - 1) / size < 0.25 && size > 2) {
 			changeSize(size / 2);
 		}
 		--length;
-		T node;
+		TableNode<T> node;
 		uint32_t i = hash(id);
 		uint32_t end = (i + size - 1) & (size - 1);
 		for (; i != end; i = (i + 1) & (size - 1)) {
