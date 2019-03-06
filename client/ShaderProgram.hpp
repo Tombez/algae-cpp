@@ -14,6 +14,7 @@ public:
 	GLuint vbo;
 	GLuint ebo;
 	std::vector<GLint> attribPositions;
+	std::vector<GLint> uniformLocations;
 	ShaderProgram() {}
 	ShaderProgram(const char* vertPath, const char* fragPath,
 		std::vector<std::pair<GLuint, const char*>> attributes

@@ -9,6 +9,8 @@
 #include "../IDGenerator.hpp"
 #include "../HashTable.hpp"
 #include "../Cell.hpp"
+#include "../options.hpp"
+#include "../Player.hpp"
 
 #if defined(unix)
 #elif defined (_WIN32)
@@ -20,50 +22,38 @@
 #include <cstring>
 #include <vector>
 #include <algorithm>
-
-class Player;
+#include <cmath>
+#include <cassert>
 
 class PlayerCell : public Cell {
 public:
-	Player* parent;
+	Player<PlayerCell>* parent;
 	PlayerCell() {}
-	PlayerCell(float x, float y, float r, uint32_t id, Player* parent) :
+	PlayerCell(float x, float y, float r, uint32_t id, Player<PlayerCell>* parent) :
 		Cell(x, y, r, id, opcodes::cellType::player), parent(parent) {}
-};
-
-class Player {
-public:
-	uint32_t ip;
-	uint16_t port;
-	// uint32_t id; // I don't think players need ids
-	std::vector<Cell*> cells;
-	HashTable<uint8_t> cellSet;
-	std::string name;
-	std::string skin;
-	Player(uint32_t ip, uint16_t port) : ip(ip), port(port) {}
 };
 
 const uint16_t PORT = 49152;
 const uint32_t MAX_PLAYERS = 9999;
 const uint16_t MAX_PACKET_SIZE = 1400;
 const uint8_t QT_MAX_OBJECTS = 15;
-const float MAP_SIZE = 512.0;
+const float MAP_SIZE = 1080.0;
 const float MIN_MAP = -MAP_SIZE / 2;
 const float MAX_MAP = MAP_SIZE / 2;
 const uint32_t PELLET_MIN_COUNT = 20;
-const float PELLET_MIN_R = 1.0;
-const float PELLET_MAX_R = 2.0;
+const float PELLET_MIN_R = 10.0;
+const float PELLET_MAX_R = 15.0;
+const float PLAYER_START_R = 37.42;
 const float TPS = 5.0;
 
 sock::Socket socky;
 struct sockaddr_in dest;
-std::vector<Player> players;
+std::vector<Player<PlayerCell>*> players;
 TimeStamp now;
 TimeStamp prevTime;
 Buffer toClient(MAX_PACKET_SIZE);
 LooseQuadTree<Cell> qt(MIN_MAP, MIN_MAP, MAP_SIZE, QT_MAX_OBJECTS);
 uint32_t cellID = 0;
-std::vector<Cell*> cells;
 uint32_t pelletCount = 0;
 Random prng;
 IDGenerator idGen;
@@ -82,7 +72,11 @@ void onReceive(struct sockaddr_in *from, Buffer &buf) {
 		case opcodes::client::connectReq: {
 			if (players.size() < MAX_PLAYERS) {
 				std::puts("creating new client");
-				players.emplace_back(from->sin_addr.s_addr, from->sin_port);
+				auto *p = new Player<PlayerCell>(from->sin_addr.s_addr, from->sin_port);
+				players.push_back(p);
+				PlayerCell* pc = new PlayerCell(0, 0, PLAYER_START_R, idGen.next(), p);
+				p->myCells.push_back(pc);
+				cellsByID.insert(pc->id, pc);
 				toClient.setIndex(0);
 				toClient.write<uint8_t>(opcodes::server::connectAccept);
 				toClient.write<uint8_t>(0x0);
@@ -97,11 +91,22 @@ void onReceive(struct sockaddr_in *from, Buffer &buf) {
 		}
 		case opcodes::client::disconnect: {
 			for (uint32_t i = 0; i < players.size(); ++i) {
-				Player& p = players[i];
-				if (p.ip == from->sin_addr.s_addr &&
-					p.port == from->sin_port)
+				Player<PlayerCell>* p = players[i];
+				if (p->ip == from->sin_addr.s_addr &&
+					p->port == from->sin_port)
 				{
+					for (Cell* c : p->myCells) {
+						cellsByID.remove(c->id);
+						if (c->type == opcodes::cellType::player) {
+							delete ((PlayerCell*)c);
+						} else if (c->type == opcodes::cellType::pellet) {
+							delete c;
+						} else {
+							assert(false);
+						}
+					}
 					players.erase(players.begin() + i);
+					delete p;
 					break;
 				}
 			}
@@ -136,28 +141,22 @@ void update(float dt) {
 		const uint32_t id = idGen.next();
 		Cell* pellet = new Cell(x, y, r, id);
 		pellet->type = opcodes::cellType::pellet;
-		cells.push_back(pellet);
 		cellsByID.insert(pellet->id, pellet);
 	}
 	// TODO: add viruses
 	// TODO: player input handling
 	// TODO: move cells
-	for (uint32_t i = 0; i < cells.size(); ++i) {
-		qt.insertCircle(cells[i]);
-	}
+	cellsByID.forEach([&](TableNode<Cell*>* node) {
+		qt.insertCircle(node->payload);
+	});
 	// TODO: collision handling
 	for (uint32_t i = 0; i < players.size(); ++i) {
-		Player& player = players[i];
+		Player<PlayerCell>& player = *players[i];
+		// TODO: remove inactive players
 		dest.sin_addr.s_addr = player.ip;
 		dest.sin_port = player.port;
 
-		// TODO: take into account view size
-		AABB view = AABB(-1920.0 / 2, -1080.0 / 2, 1920.0, 1080.0);
-		for (uint16_t i = 0; i < player.cells.size(); ++i) {
-			Cell* cell = player.cells[i];
-			view.x += cell->x / player.cells.size();
-			view.y += cell->y / player.cells.size();
-		}
+		AABB view = player.getView();
 		std::vector<Cell*> onScreen = qt.getVerletList(view);
 
 		toClient.setIndex(0);
@@ -179,37 +178,40 @@ void update(float dt) {
 			uint16_t readFlagsIndex = toClient.getIndex();
 			uint8_t readFlags = 0;
 			toClient.write<uint8_t>(readFlags);
-			if (!player.cellSet.has(cell->id)) {
+			if (!player.cellsByID.has(cell->id)) {
 				readFlags |= opcodes::server::readFlags::type;
 				toClient.write<uint8_t>(cell->type);
 				if (cell->type == opcodes::cellType::player) {
-					PlayerCell* cell = (PlayerCell*)cell;
-					if (!cell->parent->name.empty()) {
-						readFlags |= opcodes::server::readFlags::name;
-						toClient.write<std::string>(cell->parent->name);
+					PlayerCell* pcell = (PlayerCell*)cell;
+					if (pcell->parent == &player) {
+						toClient.writeAt<uint8_t>(opcodes::cellType::myCell, toClient.getIndex() - 1);
 					}
-					if (!cell->parent->skin.empty()) {
+					if (!pcell->parent->name.empty()) {
+						readFlags |= opcodes::server::readFlags::name;
+						toClient.write<std::string>(pcell->parent->name);
+					}
+					if (!pcell->parent->skin.empty()) {
 						readFlags |= opcodes::server::readFlags::skin;
-						toClient.write<std::string>(cell->parent->skin);
+						toClient.write<std::string>(pcell->parent->skin);
 					}
 				}
 			}
 			toClient.writeAt<uint8_t>(readFlags, readFlagsIndex);
-			player.cellSet.insert(cell->id, localFrame);
+			player.cellsByID.insert(cell->id, localFrame);
 		}
 		// toClient.writeAt<uint16_t>(updateCount, updateCountIndex);
 
 		uint16_t disappearCount = 0;
 		uint16_t disappearCountIndex = toClient.getIndex();
 		toClient.write<uint16_t>(disappearCount);
-		player.cellSet.forEach([&](TableNode<uint8_t>* node) {
+		player.cellsByID.forEach([&](TableNode<uint8_t>* node) {
 			if (node->payload != localFrame) {
 				++disappearCount;
 				toClient.write<uint32_t>(node->id);
 			}
 		});
 		toClient.writeAt<uint16_t>(disappearCount, disappearCountIndex);
-		player.cellSet.filter([&](TableNode<uint8_t>* node) {
+		player.cellsByID.filter([&](TableNode<uint8_t>* node) {
 			return node->payload == localFrame;
 		});
 

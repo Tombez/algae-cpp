@@ -6,6 +6,20 @@ public:
 	float y;
 	Point() {}
 	Point(float x, float y) : x(x), y(y) {}
+	Point& operator +=(const Point& b) {
+		x += b.x;
+		y += b.y;
+		return *this;
+	}
+	Point& operator /=(float b) {
+		x /= b;
+		y /= b;
+		return *this;
+	}
+	Point assign(const Point& b) {
+		this->x = b.x;
+		this->y = b.y;
+	}
 };
 
 class Circle : public Point {

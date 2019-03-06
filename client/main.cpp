@@ -7,6 +7,7 @@
 #include "../IDGenerator.hpp"
 #include "../HashTable.hpp"
 #include "../Random.hpp"
+#include "../Player.hpp"
 #include "./initGLFW.hpp"
 #include "./Drawable.hpp"
 #include "./CellColored.hpp"
@@ -41,8 +42,11 @@ struct sockaddr_in server;
 
 Buffer toServer(1400);
 uint8_t keys = 0;
-HashTable<CellColored*> cellsByID;
+Player<CellColored, CellColored*> me;
 Random prng;
+Circle camera;
+float viewScale = 1.0;
+float viewportScale = 1.0;
 
 static void cursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
 	prev = mouse;
@@ -117,18 +121,28 @@ void onReceive(struct sockaddr_in *from, Buffer& buf) {
 				if (readFlags & opcodes::server::readFlags::skin) {
 					skin = buf.read<std::string>();
 				}
-				TableNode<CellColored*> node = cellsByID.read(cellID);
+				TableNode<CellColored*> node = me.cellsByID.read(cellID);
 				CellColored* cell;
 				if (node.id == unusedID) {
 					cell = new CellColored(x, y, r, cellID, cellType,
 						color::hueToColor(prng()));
-					cellsByID.insert(cellID, cell);
+					me.cellsByID.insert(cellID, cell);
+					if (cell->type == opcodes::cellType::myCell) {
+						cell->type = opcodes::cellType::player;
+						me.myCells.push_back(cell);
+					}
 				} else {
 					cell = node.payload;
-					cell->x = x / 260; // divisions are temporary
-					cell->y = y / 260;
-					cell->r = r / 100;
+					cell->x = x;
+					cell->y = y;
+					cell->r = r;
 				}
+			}
+
+			uint16_t disappearCount = buf.read<uint16_t>();
+			for (uint16_t i = 0; i < disappearCount; ++i) {
+				uint32_t id = buf.read<uint32_t>();
+				// TODO: handle disappeared
 			}
 			break;
 		}
@@ -177,6 +191,11 @@ void update(float dt) {
 	bx = mouse.x / ww * 2.0 - 1.0;
 	by = (mouse.y / wh * 2.0 - 1.0) * -1.0;
 
+	camera.assign(me.getPos());
+	viewScale = me.getViewScale();
+	viewportScale = std::max(ww / options::viewBaseWidth, wh / options::viewBaseHeight);
+	camera.r = viewScale * viewportScale;
+
 	toServer.setIndex(0);
 	toServer.write<uint8_t>(opcodes::client::input);
 	toServer.write<float>(bx);
@@ -185,7 +204,7 @@ void update(float dt) {
 	keys = 0;
 	socky.sendMessage(&server, toServer);
 
-	cellsByID.forEach([&](TableNode<CellColored*>* node)->void {
+	me.cellsByID.forEach([&](TableNode<CellColored*>* node)->void {
 		addCellToList(vbod, ebod, node->payload);
 	});
 }
@@ -193,6 +212,9 @@ void update(float dt) {
 void draw() {
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
+
+	glUniform2f(glsp.uniformLocations[0], camera.x, camera.y);
+	glUniform2f(glsp.uniformLocations[1], camera.r / (ww / 2), camera.r / (wh / 2));
 
 	glBufferData(GL_ARRAY_BUFFER, vbod.size() * sizeof(float), vbod.data(), GL_STREAM_DRAW);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, ebod.size() * sizeof(GLuint), ebod.data(), GL_STREAM_DRAW);

@@ -12,8 +12,8 @@ void errorCallback(int error, const char* description) {
 }
 
 GLFWwindow* window = nullptr;
-int ww = 600;
-int wh = 600;
+int ww = 720;
+int wh = 405;
 ShaderProgram glsp;
 float refreshRate = 60.0;
 
@@ -74,6 +74,11 @@ void init() {
 			{2, "position"},
 			{4, "color"}
 		}));
+	glsp.uniformLocations.push_back(glGetUniformLocation(glsp.id, "camera"));
+	glsp.uniformLocations.push_back(glGetUniformLocation(glsp.id, "scale"));
+	for (const GLint location : glsp.uniformLocations) {
+		assert(location != -1);
+	}
 }
 
 void cleanup() {
