@@ -28,11 +28,7 @@
 const float PI = 3.1415926;
 const float TAU = 2 * PI;
 
-Point mouse(0, 0);
 Point prev(0, 0);
-
-float bx = 0.0;
-float by = 0.0;
 
 std::vector<float> vbod;
 std::vector<GLuint> ebod;
@@ -49,9 +45,8 @@ float viewScale = 1.0;
 float viewportScale = 1.0;
 
 static void cursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
-	prev = mouse;
-	mouse.x = (float)xpos;
-	mouse.y = (float)ypos;
+	prev = me.mouse;
+	me.mouse.assign((float)xpos, (float)ypos);
 }
 static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	if (action != GLFW_PRESS)
@@ -133,6 +128,9 @@ void onReceive(struct sockaddr_in *from, Buffer& buf) {
 					}
 				} else {
 					cell = node.payload;
+					// if (cell->type == opcodes::cellType::player) { // debug
+					// 	std::printf("%f %f %f\n", x, y, r);
+					// }
 					cell->x = x;
 					cell->y = y;
 					cell->r = r;
@@ -188,9 +186,6 @@ void addCellToList(std::vector<float>& vbod, std::vector<GLuint>& ebod, CellColo
 	ebod.push_back(offset);
 }
 void update(float dt) {
-	bx = mouse.x / ww * 2.0 - 1.0;
-	by = (mouse.y / wh * 2.0 - 1.0) * -1.0;
-
 	camera.assign(me.getPos());
 	viewScale = me.getViewScale();
 	viewportScale = std::max(ww / options::viewBaseWidth, wh / options::viewBaseHeight);
@@ -198,8 +193,10 @@ void update(float dt) {
 
 	toServer.setIndex(0);
 	toServer.write<uint8_t>(opcodes::client::input);
-	toServer.write<float>(bx);
-	toServer.write<float>(by);
+	float x = (me.mouse.x - ww / 2.0) / camera.r + camera.x;
+	float y = (me.mouse.y - wh / 2.0) / camera.r + camera.y;
+	toServer.write<float>(x);
+	toServer.write<float>(y);
 	toServer.write<uint8_t>(keys);
 	keys = 0;
 	socky.sendMessage(&server, toServer);
@@ -214,7 +211,7 @@ void draw() {
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	glUniform2f(glsp.uniformLocations[0], camera.x, camera.y);
-	glUniform2f(glsp.uniformLocations[1], camera.r / (ww / 2), camera.r / (wh / 2));
+	glUniform2f(glsp.uniformLocations[1], camera.r / (ww / 2), -camera.r / (wh / 2));
 
 	glBufferData(GL_ARRAY_BUFFER, vbod.size() * sizeof(float), vbod.data(), GL_STREAM_DRAW);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, ebod.size() * sizeof(GLuint), ebod.data(), GL_STREAM_DRAW);

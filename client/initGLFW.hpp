@@ -74,6 +74,7 @@ void init() {
 			{2, "position"},
 			{4, "color"}
 		}));
+	glUseProgram(glsp.id);
 	glsp.uniformLocations.push_back(glGetUniformLocation(glsp.id, "camera"));
 	glsp.uniformLocations.push_back(glGetUniformLocation(glsp.id, "scale"));
 	for (const GLint location : glsp.uniformLocations) {

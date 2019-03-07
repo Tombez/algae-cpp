@@ -19,8 +19,11 @@ public:
 	HashTable<SetContent> cellsByID;
 	std::string name;
 	std::string skin;
+	Point mouse;
+	uint8_t keys;
 	Player() : ip{0}, port{0} {}
-	Player(uint32_t ip, uint16_t port) : ip(ip), port(port) {}
+	Player(uint32_t ip, uint16_t port) : ip(ip), port(port), mouse(0, 0),
+		keys(0) {}
 	float getScore() {
 		float score = 0.0;
 		for (const CellType* cell : myCells) {

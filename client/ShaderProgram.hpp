@@ -34,7 +34,6 @@ public:
 		glAttachShader(id, vert.id);
 		glAttachShader(id, frag.id);
 		glLinkProgram(id);
-		glUseProgram(id);
 
 		GLuint attribStride = 0;
 		for (uint32_t i = 0; i < attributes.size(); ++i) {

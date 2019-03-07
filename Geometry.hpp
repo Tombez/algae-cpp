@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 class Point {
 public:
 	float x;
@@ -16,9 +18,29 @@ public:
 		y /= b;
 		return *this;
 	}
-	Point assign(const Point& b) {
+	Point& operator *=(float b) {
+		x *= b;
+		y *= b;
+		return *this;
+	}
+	Point operator *(float b) {
+		return Point(x * b, y * b);
+	}
+	Point operator -(Point b) {
+		return Point(x - b.x, y - b.y);
+	}
+	Point& assign(const Point& b) {
 		this->x = b.x;
 		this->y = b.y;
+		return *this;
+	}
+	Point& assign(float x, float y) {
+		this->x = x;
+		this->y = y;
+		return *this;
+	}
+	float getDist() {
+		return std::sqrt(x * x + y * y);
 	}
 };
 

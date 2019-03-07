@@ -8,9 +8,9 @@
 #include "../LooseQuadTree.hpp"
 #include "../IDGenerator.hpp"
 #include "../HashTable.hpp"
-#include "../Cell.hpp"
 #include "../options.hpp"
 #include "../Player.hpp"
+#include "./Cell.hpp"
 
 #if defined(unix)
 #elif defined (_WIN32)
@@ -31,6 +31,11 @@ public:
 	PlayerCell() {}
 	PlayerCell(float x, float y, float r, uint32_t id, Player<PlayerCell>* parent) :
 		Cell(x, y, r, id, opcodes::cellType::player), parent(parent) {}
+	float getSpeed(float mouseDist) {
+		float speed = 2.2 * std::pow(r, -0.439);
+		speed *= 40 * options::server::playerSpeedMultiplier;
+		return std::min(mouseDist, speed);
+	}
 };
 
 const uint16_t PORT = 49152;
@@ -44,7 +49,7 @@ const uint32_t PELLET_MIN_COUNT = 20;
 const float PELLET_MIN_R = 10.0;
 const float PELLET_MAX_R = 15.0;
 const float PLAYER_START_R = 37.42;
-const float TPS = 5.0;
+const float TPS = 20.0;
 
 sock::Socket socky;
 struct sockaddr_in dest;
@@ -116,12 +121,17 @@ void onReceive(struct sockaddr_in *from, Buffer &buf) {
 		case opcodes::client::input: {
 			float x = buf.read<float>();
 			float y = buf.read<float>();
+			Point mouse = Point(x, y);
 			uint8_t keys = buf.read<uint8_t>();
-			if (keys & opcodes::client::actions::split) {
-				std::puts("client split");
-			}
-			if (keys & opcodes::client::actions::eject) {
-				std::puts("client ejected");
+			for (uint32_t i = 0; i < players.size(); ++i) {
+				Player<PlayerCell>* p = players[i];
+				if (p->ip == from->sin_addr.s_addr &&
+					p->port == from->sin_port)
+				{
+					p->mouse = mouse;
+					p->keys = keys;
+					break;
+				}
 			}
 			break;
 		}
@@ -144,9 +154,27 @@ void update(float dt) {
 		cellsByID.insert(pellet->id, pellet);
 	}
 	// TODO: add viruses
-	// TODO: player input handling
-	// TODO: move cells
+	for (Player<PlayerCell>* p : players) {
+		for (PlayerCell* pc : p->myCells) {
+			Point mouseVec = p->mouse - *pc;
+			float dist = mouseVec.getDist();
+			if (dist == 0) {
+				break;
+			}
+			float speed = pc->getSpeed(dist);
+			mouseVec *= speed / dist * dt; // get speed vector and normalize
+			assert(!std::isnan(mouseVec.x) && !std::isnan(mouseVec.y));
+			*pc += mouseVec;
+		}
+		if (p->keys & opcodes::client::actions::split) {
+			std::puts("client split");
+		}
+		if (p->keys & opcodes::client::actions::eject) {
+			std::puts("client ejected");
+		}
+	}
 	cellsByID.forEach([&](TableNode<Cell*>* node) {
+		//node->payload->move(dt);
 		qt.insertCircle(node->payload);
 	});
 	// TODO: collision handling
