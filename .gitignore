@@ -32,5 +32,5 @@
 *.app
 
 
-client/glew-2.1.0
-client/glfw-3.2.1
+src/client/glew-2.1.0
+src/client/glfw-3.2.1
