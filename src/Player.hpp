@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./Geometry.hpp"
+#include "./Vec2.hpp"
 #include "./HashTable.hpp"
 #include "./options.hpp"
 
@@ -19,7 +20,7 @@ public:
 	HashTable<SetContent> cellsByID;
 	std::string name;
 	std::string skin;
-	Point mouse;
+	Vec2 mouse;
 	uint8_t keys;
 	Player() : ip{0}, port{0} {}
 	Player(uint32_t ip, uint16_t port) : ip(ip), port(port), mouse(0, 0),
@@ -38,8 +39,8 @@ public:
 		}
 		return pow(std::min(64 / score, 1.0f), 0.4);
 	}
-	Point getPos() {
-		Point pos(0.0, 0.0);
+	Vec2 getPos() {
+		Vec2 pos(0.0, 0.0);
 		for (const CellType* cell : myCells) {
 			pos += *cell;
 		}
@@ -52,7 +53,7 @@ public:
 		float scale = this->getViewScale();
 		float w = options::viewBaseWidth * scale;
 		float h = options::viewBaseHeight * scale;
-		Point pos = this->getPos();
+		Vec2 pos = this->getPos();
 		return AABB(pos.x - w / 2, pos.y - h / 2, w, h);
 	}
 };

@@ -4,6 +4,7 @@
 #include "../opcodes.hpp"
 #include "../Buffer.hpp"
 #include "../Geometry.hpp"
+#include "../Vec2.hpp"
 #include "../Random.hpp"
 #include "../LooseQuadTree.hpp"
 #include "../IDGenerator.hpp"
@@ -121,7 +122,7 @@ void onReceive(struct sockaddr_in *from, Buffer &buf) {
 		case opcodes::client::input: {
 			float x = buf.read<float>();
 			float y = buf.read<float>();
-			Point mouse = Point(x, y);
+			Vec2 mouse = Vec2(x, y);
 			uint8_t keys = buf.read<uint8_t>();
 			for (uint32_t i = 0; i < players.size(); ++i) {
 				Player<PlayerCell>* p = players[i];
@@ -156,7 +157,7 @@ void update(float dt) {
 	// TODO: add viruses
 	for (Player<PlayerCell>* p : players) {
 		for (PlayerCell* pc : p->myCells) {
-			Point mouseVec = p->mouse - *pc;
+			Vec2 mouseVec = p->mouse - *pc;
 			float dist = mouseVec.getDist();
 			if (dist == 0) {
 				break;

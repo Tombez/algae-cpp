@@ -1,5 +1,6 @@
 #include "../TimeStamp.hpp"
 #include "../Geometry.hpp"
+#include "../Vec2.hpp"
 #include "../colorUtils.hpp"
 #include "../Socket.hpp"
 #include "../opcodes.hpp"
@@ -28,7 +29,7 @@
 const float PI = 3.1415926;
 const float TAU = 2 * PI;
 
-Point prev(0, 0);
+Vec2 prev(0, 0);
 
 std::vector<float> vbod;
 std::vector<GLuint> ebod;
