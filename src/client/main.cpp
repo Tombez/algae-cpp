@@ -43,6 +43,7 @@ Random prng;
 Circle camera;
 float viewScale = 1.0;
 float viewportScale = 1.0;
+std::vector<CellColored*> cellArray;
 
 static void cursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
 	prev = me.mouse;
@@ -202,8 +203,15 @@ void update(float dt) {
 	socky.sendMessage(&server, toServer);
 
 	me.cellsByID.forEach([&](TableNode<CellColored*>* node)->void {
-		addCellToList(vbod, ebod, node->payload);
+		cellArray.push_back(node->payload);
 	});
+	std::sort(cellArray.begin(), cellArray.end(), [](CellColored* a, CellColored* b) {
+		return a->r < b->r;
+	});
+	for (const auto c : cellArray) {
+		addCellToList(vbod, ebod, c);
+	}
+	cellArray.clear();
 }
 
 void draw() {
