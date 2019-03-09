@@ -20,7 +20,7 @@ public:
 	HashTable<SetContent> cellsByID;
 	std::string name;
 	std::string skin;
-	Vec2 mouse;
+	Vec2<float> mouse;
 	uint8_t keys;
 	Player() : ip{0}, port{0} {}
 	Player(uint32_t ip, uint16_t port) : ip(ip), port(port), mouse(0, 0),
@@ -39,8 +39,8 @@ public:
 		}
 		return pow(std::min(64 / score, 1.0f), 0.4);
 	}
-	Vec2 getPos() {
-		Vec2 pos(0.0, 0.0);
+	Vec2<float> getPos() {
+		Vec2<float> pos(0.0, 0.0);
 		for (const CellType* cell : myCells) {
 			pos += *cell;
 		}
@@ -53,7 +53,7 @@ public:
 		float scale = this->getViewScale();
 		float w = options::viewBaseWidth * scale;
 		float h = options::viewBaseHeight * scale;
-		Vec2 pos = this->getPos();
+		Vec2<float> pos = this->getPos();
 		return AABB(pos.x - w / 2, pos.y - h / 2, w, h);
 	}
 };

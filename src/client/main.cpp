@@ -29,7 +29,7 @@
 const float PI = 3.1415926;
 const float TAU = 2 * PI;
 
-Vec2 prev(0, 0);
+Vec2<float> prev(0, 0);
 
 std::vector<float> vbod;
 std::vector<GLuint> ebod;

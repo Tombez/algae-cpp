@@ -2,14 +2,14 @@
 
 #include "./Vec2.hpp"
 
-class Circle : public Vec2 {
+class Circle : public Vec2<float> {
 public:
 	float r;
 	Circle() {}
 	Circle(float x, float y, float r) : Vec2(x, y), r(r) {}
 };
 
-class AABB : public Vec2 {
+class AABB : public Vec2<float> {
 public:
 	float w;
 	float h;
@@ -17,7 +17,7 @@ public:
 	AABB(float x, float y, float w, float h) : Vec2(x, y), w(w), h(h) {}
 };
 
-class Square : public Vec2 {
+class Square : public Vec2<float> {
 public:
 	float s;
 	Square() {}
