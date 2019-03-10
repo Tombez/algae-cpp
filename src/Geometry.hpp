@@ -2,6 +2,9 @@
 
 #include "./Vec2.hpp"
 
+const float PI = 3.1415926;
+const float TAU = 2 * PI;
+
 class Circle : public Vec2<float> {
 public:
 	float r;

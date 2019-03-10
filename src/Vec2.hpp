@@ -24,23 +24,28 @@ public:
 		y *= b;
 		return *this;
 	}
-	Vec2<T> operator *(T b) {
+	Vec2<T> operator *(T b) const {
 		return Vec2(x * b, y * b);
 	}
-	Vec2<T> operator -(Vec2<T> b) {
+	Vec2<T> operator -(Vec2<T> b) const {
 		return Vec2(x - b.x, y - b.y);
 	}
 	Vec2<T>& assign(const Vec2<T>& b) {
-		this->x = b.x;
-		this->y = b.y;
+		x = b.x;
+		y = b.y;
 		return *this;
 	}
-	Vec2<T>& assign(T x, T y) {
-		this->x = x;
-		this->y = y;
+	Vec2<T>& assign(T nx, T ny) {
+		x = nx;
+		y = ny;
 		return *this;
 	}
-	T getDist() {
+	Vec2<T>& fromAngle(float angle) {
+		x = std::cos(angle);
+		y = std::sin(angle);
+		return *this;
+	}
+	T getDist() const {
 		return std::sqrt(x * x + y * y);
 	}
 };

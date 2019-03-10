@@ -11,7 +11,8 @@
 #include "../Player.hpp"
 #include "./initGLFW.hpp"
 #include "./Drawable.hpp"
-#include "./CellColored.hpp"
+#include "./Cell.hpp"
+#include "./Renderer.hpp"
 
 // #if defined(unix)
 // #elif defined (_WIN32)
@@ -26,25 +27,20 @@
 #include <algorithm>
 #include <memory>
 
-const float PI = 3.1415926;
-const float TAU = 2 * PI;
-
 Vec2<float> prev(0, 0);
-
-std::vector<float> vbod;
-std::vector<GLuint> ebod;
 
 sock::Socket socky;
 struct sockaddr_in server;
 
 Buffer toServer(1400);
 uint8_t keys = 0;
-Player<CellColored, CellColored*> me;
+Player<Cell, Cell*> me;
 Random prng;
 Circle camera;
 float viewScale = 1.0;
 float viewportScale = 1.0;
-std::vector<CellColored*> cellArray;
+std::vector<Cell*> cellArray;
+Renderer renderer;
 
 static void cursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
 	prev = me.mouse;
@@ -118,10 +114,10 @@ void onReceive(struct sockaddr_in *from, Buffer& buf) {
 				if (readFlags & opcodes::server::readFlags::skin) {
 					skin = buf.read<std::string>();
 				}
-				TableNode<CellColored*> node = me.cellsByID.read(cellID);
-				CellColored* cell;
+				TableNode<Cell*> node = me.cellsByID.read(cellID);
+				Cell* cell;
 				if (node.id == unusedID) {
-					cell = new CellColored(x, y, r, cellID, cellType,
+					cell = new Cell(x, y, r, cellID, cellType,
 						color::hueToColor(prng()));
 					me.cellsByID.insert(cellID, cell);
 					if (cell->type == opcodes::cellType::myCell) {
@@ -130,9 +126,6 @@ void onReceive(struct sockaddr_in *from, Buffer& buf) {
 					}
 				} else {
 					cell = node.payload;
-					// if (cell->type == opcodes::cellType::player) { // debug
-					// 	std::printf("%f %f %f\n", x, y, r);
-					// }
 					cell->x = x;
 					cell->y = y;
 					cell->r = r;
@@ -147,45 +140,6 @@ void onReceive(struct sockaddr_in *from, Buffer& buf) {
 			break;
 		}
 	}
-}
-template<typename T>
-void addArrayToList(std::vector<T>& list, T* arr, uint32_t len, uint32_t off) {
-	uint32_t size = list.size();
-	uint32_t cap = list.capacity();
-	if (cap == 0)
-		cap = len;
-	while (size + len > cap)
-		cap *= 2;
-	list.reserve(cap);
-	for (uint32_t i = 0; i < len; ++i)
-		list.push_back(arr[i] + off);
-}
-void addCellToList(std::vector<float>& vbod, std::vector<GLuint>& ebod, CellColored* cell) { // temporary function
-	uint8_t numPoints = 16;
-	size_t offset = vbod.size() / 6;
-	vbod.push_back(cell->x);
-	vbod.push_back(cell->y);
-	vbod.push_back((float)(cell->color >> 24));
-	vbod.push_back((float)(cell->color >> 16 & 0xff));
-	vbod.push_back((float)(cell->color >> 8 & 0xff));
-	vbod.push_back((float)(cell->color & 0xff));
-	for (uint16_t i = 0; i < numPoints; ++i) {
-		float angle = (float)i / numPoints * TAU;
-		vbod.push_back(cell->x + cos(angle) * cell->r);
-		vbod.push_back(cell->y + sin(angle) * cell->r);
-		vbod.push_back((float)(cell->color >> 24));
-		vbod.push_back((float)(cell->color >> 16 & 0xff));
-		vbod.push_back((float)(cell->color >> 8 & 0xff));
-		vbod.push_back((float)(cell->color & 0xff));
-	}
-	for (uint16_t i = 2; i <= numPoints; ++i) {
-		ebod.push_back(offset + i - 1);
-		ebod.push_back(offset + i);
-		ebod.push_back(offset);
-	}
-	ebod.push_back(offset + numPoints);
-	ebod.push_back(offset + 1);
-	ebod.push_back(offset);
 }
 void update(float dt) {
 	camera.assign(me.getPos());
@@ -203,14 +157,17 @@ void update(float dt) {
 	keys = 0;
 	socky.sendMessage(&server, toServer);
 
-	me.cellsByID.forEach([&](TableNode<CellColored*>* node)->void {
+	me.cellsByID.forEach([&](TableNode<Cell*>* node)->void {
 		cellArray.push_back(node->payload);
 	});
-	std::sort(cellArray.begin(), cellArray.end(), [](CellColored* a, CellColored* b) {
+	std::sort(cellArray.begin(), cellArray.end(), [](Cell* a, Cell* b) {
 		return a->r < b->r;
 	});
 	for (const auto c : cellArray) {
-		addCellToList(vbod, ebod, c);
+		c->updateNumPoints(camera.r, prng);
+		c->movePoints(prng);
+		renderer.color = c->color;
+		renderer.triangleFan(*c, c->points);
 	}
 	cellArray.clear();
 }
@@ -222,9 +179,7 @@ void draw() {
 	glUniform2f(glsp.uniformLocations[0], camera.x, camera.y);
 	glUniform2f(glsp.uniformLocations[1], camera.r / (ww / 2), -camera.r / (wh / 2));
 
-	glBufferData(GL_ARRAY_BUFFER, vbod.size() * sizeof(float), vbod.data(), GL_STREAM_DRAW);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, ebod.size() * sizeof(GLuint), ebod.data(), GL_STREAM_DRAW);
-	glDrawElements(GL_TRIANGLES, ebod.size(), GL_UNSIGNED_INT, 0);
+	renderer.render();
 
 	glfwSwapBuffers(window);
 }
@@ -275,8 +230,7 @@ int main() {
 
 			update(dt);
 			draw();
-			vbod.clear();
-			ebod.clear();
+			renderer.clear();
 		}
 	}
 
