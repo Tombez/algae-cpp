@@ -157,8 +157,8 @@ void update(float dt) {
 	keys = 0;
 	socky.sendMessage(&server, toServer);
 
-	me.cellsByID.forEach([&](TableNode<Cell*>* node)->void {
-		cellArray.push_back(node->payload);
+	me.cellsByID.forEach([&](TableNode<Cell*>& node)->void {
+		cellArray.push_back(node.payload);
 	});
 	std::sort(cellArray.begin(), cellArray.end(), [](Cell* a, Cell* b) {
 		return a->r < b->r;

@@ -137,7 +137,7 @@ public:
 	void forEach(CB callback) {
 		for (uint32_t i = 0; i < size; ++i) {
 			if (data[i].id != unusedID) {
-				callback(&data[i]);
+				callback(data[i]);
 			}
 		}
 	}

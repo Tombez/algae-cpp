@@ -174,9 +174,9 @@ void update(float dt) {
 			std::puts("client ejected");
 		}
 	}
-	cellsByID.forEach([&](TableNode<Cell*>* node) {
-		//node->payload->move(dt);
-		qt.insertCircle(node->payload);
+	cellsByID.forEach([&](TableNode<Cell*>& node) {
+		//node.payload->move(dt);
+		qt.insertCircle(node.payload);
 	});
 	// TODO: collision handling
 	for (uint32_t i = 0; i < players.size(); ++i) {
@@ -233,10 +233,10 @@ void update(float dt) {
 		uint16_t disappearCount = 0;
 		uint16_t disappearCountIndex = toClient.getIndex();
 		toClient.write<uint16_t>(disappearCount);
-		player.cellsByID.forEach([&](TableNode<uint8_t>* node) {
-			if (node->payload != localFrame) {
+		player.cellsByID.forEach([&](TableNode<uint8_t>& node) {
+			if (node.payload != localFrame) {
 				++disappearCount;
-				toClient.write<uint32_t>(node->id);
+				toClient.write<uint32_t>(node.id);
 			}
 		});
 		toClient.writeAt<uint16_t>(disappearCount, disappearCountIndex);
