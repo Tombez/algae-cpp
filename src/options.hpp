@@ -9,5 +9,7 @@ namespace options {
 	namespace client {
 		const uint16_t cellPointsMin = 5;
 		const uint16_t cellPointsMax = 120;
+
+		const float gridStep = 50;
 	}
 }

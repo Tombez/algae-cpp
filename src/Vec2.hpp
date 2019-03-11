@@ -27,8 +27,11 @@ public:
 	Vec2<T> operator *(T b) const {
 		return Vec2(x * b, y * b);
 	}
-	Vec2<T> operator -(Vec2<T> b) const {
-		return Vec2(x - b.x, y - b.y);
+	Vec2<T> operator +(const Vec2<T>& b) const {
+		return Vec2<T>(x + b.x, y + b.y);
+	}
+	Vec2<T> operator -(const Vec2<T>& b) const {
+		return Vec2<T>(x - b.x, y - b.y);
 	}
 	Vec2<T>& assign(const Vec2<T>& b) {
 		x = b.x;
@@ -43,6 +46,12 @@ public:
 	Vec2<T>& fromAngle(float angle) {
 		x = std::cos(angle);
 		y = std::sin(angle);
+		return *this;
+	}
+	Vec2<T>& setLength(float len) {
+		float scale = this->getDist() / len;
+		x *= scale;
+		y *= scale;
 		return *this;
 	}
 	T getDist() const {

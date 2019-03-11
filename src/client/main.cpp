@@ -166,15 +166,34 @@ void update(float dt) {
 	for (const auto c : cellArray) {
 		c->updateNumPoints(camera.r, prng);
 		c->movePoints(prng);
-		renderer.color = c->color;
-		renderer.triangleFan(*c, c->points);
 	}
-	cellArray.clear();
 }
 
 void draw() {
-	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClearColor(17.0/255.0, 17.0/255.0, 17.0/255.0, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
+
+	// grid
+	renderer.color = 170 << 24 | 170 << 16 | 170 << 8 | 51;
+ 	uint16_t step = options::client::gridStep;
+	float left = camera.x - (ww / 2) / camera.r;
+	float top = camera.y - (wh / 2) / camera.r;
+	float right = camera.x + (ww / 2) / camera.r;
+	float bottom = camera.y + (wh / 2) / camera.r;
+	float startX = left - std::fmod(left, step);
+	float startY = top - std::fmod(top, step);
+	for (float x = startX; x < right; x += step) {
+		renderer.line(Vec2<float>(x, top), Vec2<float>(x, bottom), 1);
+	}
+	for (float y = startY; y < bottom; y += step) {
+		renderer.line(Vec2<float>(left, y), Vec2<float>(right, y), 1);
+	}
+
+	//cells
+	for (const auto c : cellArray) {
+		renderer.color = c->color;
+		renderer.triangleFan(*c, c->points);
+	}
 
 	glUniform2f(glsp.uniformLocations[0], camera.x, camera.y);
 	glUniform2f(glsp.uniformLocations[1], camera.r / (ww / 2), -camera.r / (wh / 2));
@@ -230,6 +249,7 @@ int main() {
 
 			update(dt);
 			draw();
+			cellArray.clear();
 			renderer.clear();
 		}
 	}
