@@ -72,7 +72,7 @@ bool onSockError(int32_t errcode, const char* funcName) {
 	} else {
 		printf("function %s failed with error code: %d\n", funcName, errcode);
 	}
-	// return false;
+	return false;
 }
 void onReceive(struct sockaddr_in *from, Buffer& buf) {
 	uint8_t opcode = buf.read<uint8_t>();
@@ -88,55 +88,62 @@ void onReceive(struct sockaddr_in *from, Buffer& buf) {
 			break;
 		}
 		case opcodes::server::worldUpdate: {
-			uint16_t eatCount = buf.read<uint16_t>();
-			for (uint16_t i = 0; i < eatCount; ++i) {
-				uint32_t eaterID = buf.read<uint32_t>();
-				uint32_t eatenID = buf.read<uint32_t>();
-				// TODO: handle eaten
-			}
 			uint16_t updateCount = buf.read<uint16_t>();
 			// std::printf("update count: %u\n", updateCount);
 			for (uint16_t i = 0; i < updateCount; ++i) {
 				uint32_t cellID = buf.read<uint32_t>();
-				float x = buf.read<float>();
-				float y = buf.read<float>();
-				float r = buf.read<float>();
-				uint8_t readFlags = buf.read<uint8_t>();
+				uint16_t readFlags = buf.read<uint16_t>();
+				if (readFlags & opcodes::server::readFlags::eatenBy) {
+					uint32_t eatenByID = buf.read<uint32_t>();
+					// TODO: eaten cells move toward eater
+					me.cellsByID.erase(cellID);
+					continue;
+				}
+				float x, y, r;
+				if (readFlags & opcodes::server::readFlags::pos) {
+					x = buf.read<float>();
+					y = buf.read<float>();
+					r = buf.read<float>();
+				}
 				uint8_t cellType = 0;
-				std::string name;
-				std::string skin;
 				if (readFlags & opcodes::server::readFlags::type) {
 					cellType = buf.read<uint8_t>();
 				}
+				std::string name;
 				if (readFlags & opcodes::server::readFlags::name) {
 					name = buf.read<std::string>();
 				}
+				std::string skin;
 				if (readFlags & opcodes::server::readFlags::skin) {
 					skin = buf.read<std::string>();
 				}
-				TableNode<Cell*> node = me.cellsByID.read(cellID);
-				Cell* cell;
-				if (node.id == unusedID) {
-					cell = new Cell(x, y, r, cellID, cellType,
+				if (!me.cellsByID.has(cellID)) {
+					Cell* cell = new Cell(x, y, r, cellID, cellType,
 						color::hueToColor(prng()));
 					me.cellsByID.insert(cellID, cell);
 					if (cell->type == opcodes::cellType::myCell) {
 						cell->type = opcodes::cellType::player;
 						me.myCells.push_back(cell);
 					}
+					// TODO: add name and skin to cell
 				} else {
-					cell = node.payload;
-					cell->x = x;
-					cell->y = y;
-					cell->r = r;
+					Cell* cell = me.cellsByID.read(cellID);
+					if (readFlags & opcodes::server::readFlags::pos) {
+						cell->x = x;
+						cell->y = y;
+						cell->r = r;
+					}
 				}
 			}
 
 			uint16_t disappearCount = buf.read<uint16_t>();
 			for (uint16_t i = 0; i < disappearCount; ++i) {
 				uint32_t id = buf.read<uint32_t>();
-				// TODO: handle disappeared
+				me.cellsByID.erase(id);
+				// TODO: handle disappeared better
 			}
+			uint32_t endMessage = buf.read<uint32_t>();
+			assert(endMessage == opcodes::server::endMessage);
 			break;
 		}
 	}

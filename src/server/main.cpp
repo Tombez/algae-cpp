@@ -31,7 +31,7 @@ public:
 	Player<PlayerCell>* parent;
 	PlayerCell() {}
 	PlayerCell(float x, float y, float r, uint32_t id, Player<PlayerCell>* parent) :
-		Cell(x, y, r, id, opcodes::cellType::player), parent(parent) {}
+		Cell(x, y, r, id, opcodes::cellType::player, unusedID), parent(parent) {}
 	float getSpeed(float mouseDist) {
 		float speed = 2.2 * std::pow(r, -0.439);
 		speed *= 40 * options::server::playerSpeedMultiplier;
@@ -102,7 +102,7 @@ void onReceive(struct sockaddr_in *from, Buffer &buf) {
 					p->port == from->sin_port)
 				{
 					for (Cell* c : p->myCells) {
-						cellsByID.remove(c->id);
+						cellsByID.erase(c->id);
 						if (c->type == opcodes::cellType::player) {
 							delete ((PlayerCell*)c);
 						} else if (c->type == opcodes::cellType::pellet) {
@@ -150,15 +150,15 @@ void update(float dt) {
 		const float y = prng(MIN_MAP, MAX_MAP);
 		const float r = prng(PELLET_MIN_R, PELLET_MAX_R);
 		const uint32_t id = idGen.next();
-		Cell* pellet = new Cell(x, y, r, id);
+		Cell* pellet = new Cell(x, y, r, id, opcodes::cellType::pellet, unusedID);
 		pellet->type = opcodes::cellType::pellet;
 		cellsByID.insert(pellet->id, pellet);
 	}
 	// TODO: add viruses
-	for (Player<PlayerCell>* p : players) {
+	for (Player<PlayerCell>* p : players) { // player input
 		for (PlayerCell* pc : p->myCells) {
 			Vec2<float> mouseVec = p->mouse - *pc;
-			float dist = mouseVec.getDist();
+			float dist = mouseVec.getLength();
 			if (dist == 0) {
 				break;
 			}
@@ -174,11 +174,38 @@ void update(float dt) {
 			std::puts("client ejected");
 		}
 	}
+	cellsByID.filter([&](TableNode<Cell*>& node)->bool { // remove dead cells
+		if (node.payload->eatenBy != unusedID) {
+			if (node.payload->type == opcodes::cellType::pellet) {
+				--pelletCount;
+			}
+			delete node.payload;
+			return false;
+		}
+		return true;
+	});
 	cellsByID.forEach([&](TableNode<Cell*>& node) {
-		//node.payload->move(dt);
+		node.payload->move(dt);
+		node.payload->x = std::clamp(node.payload->x, MIN_MAP, MAX_MAP);
+		node.payload->y = std::clamp(node.payload->y, MIN_MAP, MAX_MAP);
 		qt.insertCircle(node.payload);
 	});
-	// TODO: collision handling
+	cellsByID.forEach([&](TableNode<Cell*>& node) {
+		Cell& c = *node.payload;
+		AABB aabb(c.x - c.r, c.y - c.r, c.r * 2, c.r * 2);
+		qt.getVerletList(aabb, [&](Cell* b)->bool {
+			if (b->eatenBy != unusedID) return false;
+			if (c.eatenBy != unusedID) return false;
+			if (b->r >= c.r) return false;
+			if (c.id == b->id) return false;
+			float distSquared = c.getDistSquared(*b);
+			if (distSquared >= (c.r + b->r) * (c.r + b->r)) return false;
+			if (std::sqrt(distSquared) < c.r - b->r / 3) { // ask MultiOgar-Edited about the 3
+				b->eatenBy = c.id;
+				c.r = std::sqrt(c.r * c.r + b->r * b->r);
+			}
+		});
+	});
 	for (uint32_t i = 0; i < players.size(); ++i) {
 		Player<PlayerCell>& player = *players[i];
 		// TODO: remove inactive players
@@ -186,27 +213,37 @@ void update(float dt) {
 		dest.sin_port = player.port;
 
 		AABB view = player.getView();
-		std::vector<Cell*> onScreen = qt.getVerletList(view);
+		std::vector<Cell*> onScreen = qt.getVerletList(view/*,
+			[&](Cell* c)->bool {
+				return view.overlapsCircle(*c);
+			}*/
+		);
 
 		toClient.setIndex(0);
 		toClient.write<uint8_t>(opcodes::server::worldUpdate);
 
-		toClient.write<uint16_t>(0x0); // eat count
-		// TODO: eaten cells
-
-		// uint16_t updateCountIndex = toClient.index;
-		uint16_t updateCount = onScreen.size();// 0;
-		std::printf("update count %u\n", updateCount);
+		uint16_t updateCount = onScreen.size();
+		// std::printf("update count: %u\n", updateCount);
 		toClient.write<uint16_t>(updateCount);
 		for (uint32_t i = 0; i < onScreen.size(); ++i) {
 			Cell* cell = onScreen[i];
 			toClient.write<uint32_t>(cell->id);
-			toClient.write<float>(cell->x);
-			toClient.write<float>(cell->y);
-			toClient.write<float>(cell->r);
 			uint16_t readFlagsIndex = toClient.getIndex();
-			uint8_t readFlags = 0;
-			toClient.write<uint8_t>(readFlags);
+			uint16_t readFlags = 0;
+			toClient.write<uint16_t>(readFlags);
+			if (cell->eatenBy != unusedID) {
+				readFlags |= opcodes::server::readFlags::eatenBy;
+				toClient.write<uint32_t>(cell->eatenBy);
+				toClient.writeAt<uint16_t>(readFlags, readFlagsIndex);
+				player.cellsByID.erase(cell->id);
+				continue;
+			}
+			if (true) { // TODO: static cells
+				readFlags |= opcodes::server::readFlags::pos;
+				toClient.write<float>(cell->x);
+				toClient.write<float>(cell->y);
+				toClient.write<float>(cell->r);
+			}
 			if (!player.cellsByID.has(cell->id)) {
 				readFlags |= opcodes::server::readFlags::type;
 				toClient.write<uint8_t>(cell->type);
@@ -225,10 +262,9 @@ void update(float dt) {
 					}
 				}
 			}
-			toClient.writeAt<uint8_t>(readFlags, readFlagsIndex);
+			toClient.writeAt<uint16_t>(readFlags, readFlagsIndex);
 			player.cellsByID.insert(cell->id, localFrame);
 		}
-		// toClient.writeAt<uint16_t>(updateCount, updateCountIndex);
 
 		uint16_t disappearCount = 0;
 		uint16_t disappearCountIndex = toClient.getIndex();
@@ -240,15 +276,14 @@ void update(float dt) {
 			}
 		});
 		toClient.writeAt<uint16_t>(disappearCount, disappearCountIndex);
-		player.cellsByID.filter([&](TableNode<uint8_t>* node) {
-			return node->payload == localFrame;
+		player.cellsByID.filter([&](TableNode<uint8_t>& node)->bool {
+			return node.payload == localFrame;
 		});
 
-		toClient.write<uint8_t>(0x0); // end of message
+		toClient.write<uint32_t>(opcodes::server::endMessage); // end of message
 		socky.sendMessage(&dest, toClient);
 	}
 	qt.clear();
-	// TODO: remove dead cells
 	++frame;
 }
 

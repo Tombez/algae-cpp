@@ -49,12 +49,12 @@ public:
 		return *this;
 	}
 	Vec2<T>& setLength(float len) {
-		float scale = this->getDist() / len;
-		x *= scale;
-		y *= scale;
-		return *this;
+		return *this *= len / this->getLength();
 	}
-	T getDist() const {
+	T getLength() const {
 		return std::sqrt(x * x + y * y);
+	}
+	T getDistSquared(const Vec2<T>& b) const {
+		return (x - b.x) * (x - b.x) + (y - b.y) * (y - b.y);
 	}
 };

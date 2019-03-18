@@ -107,6 +107,7 @@ public:
 		while (qbs.size()) {
 			QuadBranch<T>* qb = qbs.back();
 			qbs.pop_back();
+			if (!qb->overlapsAABB(aabb)) continue;
 			for (uint8_t i = 0; i < qb->objects.size(); ++i) {
 				T* cur = qb->objects[i];
 				if (shouldInclude(cur)) {

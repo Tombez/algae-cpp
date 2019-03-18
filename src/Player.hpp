@@ -37,7 +37,7 @@ public:
 		if (score == 0.0) {
 			return 0.4; // ? ask multiogar-edited
 		}
-		return pow(std::min(64 / score, 1.0f), 0.4);
+		return std::pow(std::min(64 / score, 1.0f), 0.4);
 	}
 	Vec2<float> getPos() {
 		Vec2<float> pos(0.0, 0.0);

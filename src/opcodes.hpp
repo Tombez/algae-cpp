@@ -17,31 +17,34 @@ namespace opcodes {
 	}
 	namespace server {
 		namespace readFlags {
-			const uint8_t type = 1 << 7;
-			const uint8_t name = 1 << 6;
-			const uint8_t skin = 1 << 5;
+			const uint16_t eatenBy = 1 << 0;
+			const uint16_t pos = 1 << 1;
+			const uint16_t type = 1 << 2;
+			const uint16_t name = 1 << 3;
+			const uint16_t skin = 1 << 4;
 		}
 		const uint8_t connectAccept = 0x1;
 		const uint8_t error = 0x2;
 			// ascii null terminated string "description of error"
 		const uint8_t worldUpdate = 0x3;
-			// uint16 eat count
-				// struct eat record * (eat count)
-					// uint32 eater id
-					// uint32 eaten id
 			// uint16 update count
 				// struct update record * (update count)
 					// uint32 id
-					// float x, y, r
-					// uint8 bitset read flags
+					// uint16 bitset read flags
+						// bool eatenBy
+						// bool pos
 						// bool type
 						// bool name
 						// bool skin
-					// uint8 cell type
-					// utf8 null terminated string name
-					// ascii null terminated string skin
+					// optional: uint32 eatenBy ID
+					// optional: float x, y, r
+					// optional: uint8 cell type
+					// optional: utf8 null terminated string name
+					// optional: ascii null terminated string skin
 			// uint16 disappear count
 				// uint32 cell id * (disappear count)
+			// uint32 end of message
+			const uint32_t endMessage = 1234567890;
 	}
 	namespace cellType {
 		const uint8_t pellet = 0x1;
