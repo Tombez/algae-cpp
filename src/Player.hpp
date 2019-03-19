@@ -51,8 +51,8 @@ public:
 	}
 	AABB getView() {
 		float scale = this->getViewScale();
-		float w = options::viewBaseWidth * scale;
-		float h = options::viewBaseHeight * scale;
+		float w = options::viewBaseWidth / scale;
+		float h = options::viewBaseHeight / scale;
 		Vec2<float> pos = this->getPos();
 		return AABB(pos.x - w / 2, pos.y - h / 2, w, h);
 	}
