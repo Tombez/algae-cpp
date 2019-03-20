@@ -130,7 +130,7 @@ void onReceive(struct sockaddr_in *from, Buffer &buf) {
 					p->port == from->sin_port)
 				{
 					p->mouse = mouse;
-					p->keys = keys;
+					p->keys |= keys;
 					break;
 				}
 			}
@@ -173,6 +173,7 @@ void update(float dt) {
 		if (p->keys & opcodes::client::actions::eject) {
 			std::puts("client ejected");
 		}
+		p->keys = 0;
 	}
 	cellsByID.filter([&](TableNode<Cell*>& node)->bool { // remove dead cells
 		if (node.payload->eatenBy != unusedID) {
