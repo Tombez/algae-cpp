@@ -18,7 +18,7 @@ public:
 	Circle() {}
 	Circle(float x, float y, float r) : Vec2(x, y), r(r) {}
 	bool overlapsCircle(const Circle& b) const {
-		return this->getDistSquared(b) <= r * r + b.r * b.r;
+		return this->getDistSquared(b) <= (r + b.r) * (r + b.r);
 	}
 	bool containsPoint(const Vec2<float>& p) const {
 		return this->getDistSquared(p) <= r * r;
