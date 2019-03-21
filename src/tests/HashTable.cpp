@@ -87,12 +87,27 @@ void removeChangesLength() {
 }
 void removeMovesElements() {
 	std::printf("\tRemove moves elements... ");
+	const uint32_t len = 10;
 	HashTable<uint32_t> table;
-	for (uint32_t i = 0; i < 10; ++i) {
+	for (uint32_t i = 0; i < len; ++i) {
 		table.insert(i, i);
 	}
 	table.remove(2);
-	assert(table.has(3));
+	for (uint32_t i = 3; i < len; ++i) {
+		assert(table.has(3));
+	}
+	std::puts("passed.");
+}
+void removeLeavesElements() {
+	std::printf("\tRemove leaves elements... ");
+	const uint32_t key = ~((uint32_t)0) / 4; // lowest ID that hashes to index 1 when capacity is 4.
+	HashTable<uint32_t> table;
+	table.insert(0, 6);
+	table.insert(key, 7);
+	assert(table.getCapacity() == 4);
+	assert(table.hash(key) == 1);
+	table.erase(0);
+	assert(table.has(key));
 	std::puts("passed.");
 }
 void forEach() {
@@ -125,19 +140,6 @@ void filter() {
 	}
 	std::puts("passed.");
 }
-// void insertion() {
-// 	std::array<uint32_t, 20> keys = {
-// 		0x930c6871,0x76139d05,0x5021e96a,0x7810c43,0x2abd14fa,
-// 		0x5a8756ef,0xab8c95b6,0xc663e3,0x81f8e454,0xa4efc64a,
-// 		0xe062e18a,0x43d5a60e,0x43ad03bf,0x95c70b2a,0x5b18871a,
-// 		0x1a51a3a9,0x4ee5d81f,0xa7be01e5,0xecbf7e0a,0xfcd2a36e
-// 	};
-// 	HashTable<uint8_t> table;
-// 	for (uint8_t i = 0; i < keys.getCapacity()(); ++i) {
-// 		table.insert(keys[i], 100 + i);
-// 	}
-// 	assert(false);
-// }
 
 int main() {
 	std::puts("HashTable tests running...");
@@ -148,6 +150,7 @@ int main() {
 	readAfterResize();
 	removeChangesLength();
 	removeMovesElements();
+	removeLeavesElements();
 	forEach();
 	filter();
 	std::puts("HashTable tests passed.\n");
