@@ -31,7 +31,7 @@ public:
 	Player<PlayerCell>* parent;
 	PlayerCell() {}
 	PlayerCell(float x, float y, float r, uint32_t id, Player<PlayerCell>* parent) :
-		Cell(x, y, r, id, opcodes::cellType::player, unusedID), parent(parent) {}
+		Cell(x, y, r, id, opcodes::cellType::player, IDGenerator::unusedID), parent(parent) {}
 	float getSpeed(float mouseDist) {
 		float speed = 2.2 * std::pow(r, -0.439);
 		speed *= 40 * options::server::playerSpeedMultiplier;
@@ -80,7 +80,9 @@ void onReceive(struct sockaddr_in *from, Buffer &buf) {
 				std::puts("creating new client");
 				auto *p = new Player<PlayerCell>(from->sin_addr.s_addr, from->sin_port);
 				players.push_back(p);
-				PlayerCell* pc = new PlayerCell(0, 0, PLAYER_START_R, idGen.next(), p);
+				const float x = prng(MIN_MAP, MAX_MAP);
+				const float y = prng(MIN_MAP, MAX_MAP);
+				PlayerCell* pc = new PlayerCell(x, y, PLAYER_START_R, idGen.next(), p);
 				p->myCells.push_back(pc);
 				cellsByID.insert(pc->id, pc);
 				toClient.setIndex(0);
@@ -105,8 +107,6 @@ void onReceive(struct sockaddr_in *from, Buffer &buf) {
 						cellsByID.erase(c->id);
 						if (c->type == opcodes::cellType::player) {
 							delete ((PlayerCell*)c);
-						} else if (c->type == opcodes::cellType::pellet) {
-							delete c;
 						} else {
 							assert(false);
 						}
@@ -145,13 +145,22 @@ void onReceive(struct sockaddr_in *from, Buffer &buf) {
 
 void update(float dt) {
 	uint8_t localFrame = frame & 0xff;
+	cellsByID.filter([&](TableNode<Cell*>& node)->bool { // remove dead cells
+		if (node.payload->eatenBy != IDGenerator::unusedID) {
+			if (node.payload->type == opcodes::cellType::pellet) {
+				--pelletCount;
+			}
+			delete node.payload;
+			return false;
+		}
+		return true;
+	});
 	for(; pelletCount < PELLET_MIN_COUNT; ++pelletCount) {
 		const float x = prng(MIN_MAP, MAX_MAP);
 		const float y = prng(MIN_MAP, MAX_MAP);
 		const float r = prng(PELLET_MIN_R, PELLET_MAX_R);
 		const uint32_t id = idGen.next();
-		Cell* pellet = new Cell(x, y, r, id, opcodes::cellType::pellet, unusedID);
-		pellet->type = opcodes::cellType::pellet;
+		Cell* pellet = new Cell(x, y, r, id, opcodes::cellType::pellet, IDGenerator::unusedID);
 		cellsByID.insert(pellet->id, pellet);
 	}
 	// TODO: add viruses
@@ -175,16 +184,6 @@ void update(float dt) {
 		}
 		p->keys = 0;
 	}
-	cellsByID.filter([&](TableNode<Cell*>& node)->bool { // remove dead cells
-		if (node.payload->eatenBy != unusedID) {
-			if (node.payload->type == opcodes::cellType::pellet) {
-				--pelletCount;
-			}
-			delete node.payload;
-			return false;
-		}
-		return true;
-	});
 	cellsByID.forEach([&](TableNode<Cell*>& node) {
 		node.payload->move(dt);
 		node.payload->x = std::clamp(node.payload->x, MIN_MAP, MAX_MAP);
@@ -195,8 +194,8 @@ void update(float dt) {
 		Cell& c = *node.payload;
 		AABB aabb(c.x - c.r, c.y - c.r, c.r * 2, c.r * 2);
 		qt.getVerletList(aabb, [&](Cell* b)->bool {
-			if (b->eatenBy != unusedID) return false;
-			if (c.eatenBy != unusedID) return false;
+			if (b->eatenBy != IDGenerator::unusedID) return false;
+			if (c.eatenBy != IDGenerator::unusedID) return false;
 			if (b->r >= c.r) return false;
 			if (c.id == b->id) return false;
 			float distSquared = c.getDistSquared(*b);
@@ -214,10 +213,10 @@ void update(float dt) {
 		dest.sin_port = player.port;
 
 		AABB view = player.getView();
-		std::vector<Cell*> onScreen = qt.getVerletList(view/*,
+		std::vector<Cell*> onScreen = qt.getVerletList(view,
 			[&](Cell* c)->bool {
 				return view.overlapsCircle(*c);
-			}*/
+			}
 		);
 
 		toClient.setIndex(0);
@@ -232,7 +231,7 @@ void update(float dt) {
 			uint16_t readFlagsIndex = toClient.getIndex();
 			uint16_t readFlags = 0;
 			toClient.write<uint16_t>(readFlags);
-			if (cell->eatenBy != unusedID) {
+			if (cell->eatenBy != IDGenerator::unusedID) {
 				readFlags |= opcodes::server::readFlags::eatenBy;
 				toClient.write<uint32_t>(cell->eatenBy);
 				toClient.writeAt<uint16_t>(readFlags, readFlagsIndex);

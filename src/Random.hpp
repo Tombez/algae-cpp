@@ -7,7 +7,7 @@ class Random {
 public:
 	uint32_t seed;
 	std::minstd_rand rng;
-	std::uniform_real_distribution<float> rand;
+	std::uniform_real_distribution<double> rand;
 	Random() {
 		auto rd = new std::random_device();
 		seed = (*rd)();
@@ -19,13 +19,13 @@ public:
 	}
 	void init() {
 		rng = std::minstd_rand(seed);
-		rand = std::uniform_real_distribution<float>(0.0, 1.0);
+		rand = std::uniform_real_distribution<double>(0.0, 1.0);
 	}
 	template<typename T>
 	T operator()(T min, T max) {
 		return rand(rng) * (max - min) + min;
 	}
-	float operator()() {
+	double operator()() {
 		return rand(rng);
 	}
 };

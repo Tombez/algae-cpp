@@ -4,9 +4,9 @@
 #include <cstdio>
 #include <cassert>
 
-const uint32_t unusedID = ~((uint32_t)0);
 class IDGenerator {
 public:
+	const static uint32_t unusedID = ~((uint32_t)0);
 	uint32_t step;
 	uint32_t maxIndex;
 	uint32_t index;

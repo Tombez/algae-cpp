@@ -4,8 +4,8 @@
 namespace opcodes {
 	namespace client {
 		namespace actions {
-			const uint8_t split = 1 << 7;
-			const uint8_t eject = 1 << 6;
+			const uint8_t split = 1 << 0;
+			const uint8_t eject = 1 << 1;
 		}
 		const uint8_t connectReq = 0x1;
 		const uint8_t disconnect = 0x2;
