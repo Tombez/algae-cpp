@@ -11,7 +11,7 @@ public:
 	uint32_t maxIndex;
 	uint32_t index;
 	IDGenerator() {
-		step = unusedID / 2;
+		step = 1 << 31;
 		maxIndex = 1;
 		index = 0;
 	}
@@ -22,6 +22,6 @@ public:
 			maxIndex *= 2;
 			index = 0;
 		}
-		return ((index++) * 2 + 1) * step;
+		return ((index++) * 2 + 1) * step - 1;
 	}
 };
