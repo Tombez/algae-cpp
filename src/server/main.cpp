@@ -8,7 +8,6 @@
 #include "../Random.hpp"
 #include "../LooseQuadTree.hpp"
 #include "../IDGenerator.hpp"
-#include "../HashTable.hpp"
 #include "../options.hpp"
 #include "../Player.hpp"
 #include "./Cell.hpp"
@@ -25,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cassert>
+#include <unordered_map>
 
 class PlayerCell : public Cell {
 public:
@@ -64,7 +64,7 @@ uint32_t pelletCount = 0;
 Random prng;
 IDGenerator idGen;
 uint32_t frame = 0;
-HashTable<Cell*> cellsByID;
+std::unordered_map<uint32_t, Cell*> cellsByID;
 
 bool onSockError(int32_t errcode, const char* funcName) {
 	std::printf("function %s failed with error code: %d\n", funcName, errcode);
@@ -84,7 +84,7 @@ void onReceive(struct sockaddr_in *from, Buffer &buf) {
 				const float y = prng(MIN_MAP, MAX_MAP);
 				PlayerCell* pc = new PlayerCell(x, y, PLAYER_START_R, idGen.next(), p);
 				p->myCells.push_back(pc);
-				cellsByID.insert(pc->id, pc);
+				cellsByID.insert(std::pair<uint32_t, Cell*>(pc->id, pc));
 				toClient.setIndex(0);
 				toClient.write<uint8_t>(opcodes::server::connectAccept);
 				toClient.write<uint8_t>(0x0);
@@ -145,23 +145,25 @@ void onReceive(struct sockaddr_in *from, Buffer &buf) {
 
 void update(float dt) {
 	uint8_t localFrame = frame & 0xff;
-	cellsByID.filter([&](TableNode<Cell*>& node)->bool { // remove dead cells
-		if (node.payload->eatenBy != IDGenerator::unusedID) {
-			if (node.payload->type == opcodes::cellType::pellet) {
+	for (auto i = cellsByID.begin(), last = cellsByID.end(); i != last;) { // remove dead cells
+		Cell* c = i->second;
+		if (c->eatenBy != IDGenerator::unusedID) {
+			if (c->type == opcodes::cellType::pellet) {
 				--pelletCount;
 			}
-			delete node.payload;
-			return false;
+			delete c;
+			i = cellsByID.erase(i);
+		} else {
+			++i;
 		}
-		return true;
-	});
+	}
 	for(; pelletCount < PELLET_MIN_COUNT; ++pelletCount) {
 		const float x = prng(MIN_MAP, MAX_MAP);
 		const float y = prng(MIN_MAP, MAX_MAP);
 		const float r = prng(PELLET_MIN_R, PELLET_MAX_R);
 		const uint32_t id = idGen.next();
 		Cell* pellet = new Cell(x, y, r, id, opcodes::cellType::pellet, IDGenerator::unusedID);
-		cellsByID.insert(pellet->id, pellet);
+		cellsByID.insert(std::pair<uint32_t, Cell*>(pellet->id, pellet));
 	}
 	// TODO: add viruses
 	for (Player<PlayerCell>* p : players) { // player input
@@ -184,14 +186,15 @@ void update(float dt) {
 		}
 		p->keys = 0;
 	}
-	cellsByID.forEach([&](TableNode<Cell*>& node) {
-		node.payload->move(dt);
-		node.payload->x = std::clamp(node.payload->x, MIN_MAP, MAX_MAP);
-		node.payload->y = std::clamp(node.payload->y, MIN_MAP, MAX_MAP);
-		qt.insertCircle(node.payload);
-	});
-	cellsByID.forEach([&](TableNode<Cell*>& node) {
-		Cell& c = *node.payload;
+	for (std::pair<uint32_t, Cell*> pair : cellsByID) {
+		Cell& c = *pair.second;
+		c.move(dt);
+		c.x = std::clamp(c.x, MIN_MAP, MAX_MAP);
+		c.y = std::clamp(c.y, MIN_MAP, MAX_MAP);
+		qt.insertCircle(&c);
+	}
+	for (std::pair<uint32_t, Cell*> pair : cellsByID) {
+		Cell& c = *pair.second;
 		AABB aabb(c.x - c.r, c.y - c.r, c.r * 2, c.r * 2);
 		qt.getVerletList(aabb, [&](Cell* b)->bool {
 			if (b->eatenBy != IDGenerator::unusedID) return false;
@@ -205,7 +208,7 @@ void update(float dt) {
 				c.r = std::sqrt(c.r * c.r + b->r * b->r);
 			}
 		});
-	});
+	}
 	for (uint32_t i = 0; i < players.size(); ++i) {
 		Player<PlayerCell>& player = *players[i];
 		// TODO: remove inactive players
@@ -244,7 +247,7 @@ void update(float dt) {
 				toClient.write<float>(cell->y);
 				toClient.write<float>(cell->r);
 			}
-			if (!player.cellsByID.has(cell->id)) {
+			if (player.cellsByID.count(cell->id) == 0) {
 				readFlags |= opcodes::server::readFlags::type;
 				toClient.write<uint8_t>(cell->type);
 				if (cell->type == opcodes::cellType::player) {
@@ -261,24 +264,30 @@ void update(float dt) {
 						toClient.write<std::string>(pcell->parent->skin);
 					}
 				}
+				player.cellsByID.insert(std::pair<uint32_t, uint8_t>(cell->id, localFrame));
+			} else {
+				player.cellsByID.find(cell->id)->second = localFrame;
 			}
 			toClient.writeAt<uint16_t>(readFlags, readFlagsIndex);
-			player.cellsByID.insert(cell->id, localFrame);
 		}
 
 		uint16_t disappearCount = 0;
 		uint16_t disappearCountIndex = toClient.getIndex();
 		toClient.write<uint16_t>(disappearCount);
-		player.cellsByID.forEach([&](TableNode<uint8_t>& node) {
-			if (node.payload != localFrame) {
+		for (std::pair<uint32_t, uint8_t> pair : player.cellsByID) {
+			if (pair.second != localFrame) {
 				++disappearCount;
-				toClient.write<uint32_t>(node.id);
+				toClient.write<uint32_t>(pair.first);
 			}
-		});
+		}
 		toClient.writeAt<uint16_t>(disappearCount, disappearCountIndex);
-		player.cellsByID.filter([&](TableNode<uint8_t>& node)->bool {
-			return node.payload == localFrame;
-		});
+		for (auto i = player.cellsByID.begin(), last = player.cellsByID.end(); i != last;) {
+			if (i->second != localFrame) {
+				i = player.cellsByID.erase(i);
+			} else {
+				++i;
+			}
+		}
 
 		toClient.write<uint32_t>(opcodes::server::endMessage); // end of message
 		socky.sendMessage(&dest, toClient);

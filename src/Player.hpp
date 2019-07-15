@@ -2,13 +2,13 @@
 
 #include "./Geometry.hpp"
 #include "./Vec2.hpp"
-#include "./HashTable.hpp"
 #include "./options.hpp"
 
 #include <cstdint>
 #include <cmath>
 #include <vector>
 #include <string>
+#include <unordered_map>
 
 template<class CellType, class SetContent=uint8_t>
 class Player {
@@ -17,7 +17,7 @@ public:
 	uint16_t port;
 	// uint32_t id; // I don't think players need ids
 	std::vector<CellType*> myCells;
-	HashTable<SetContent> cellsByID;
+	std::unordered_map<uint32_t, SetContent> cellsByID;
 	std::string name;
 	std::string skin;
 	Vec2<float> mouse;

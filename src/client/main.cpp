@@ -6,7 +6,6 @@
 #include "../opcodes.hpp"
 #include "../Buffer.hpp"
 #include "../IDGenerator.hpp"
-#include "../HashTable.hpp"
 #include "../Random.hpp"
 #include "../Player.hpp"
 #include "./initGLFW.hpp"
@@ -89,7 +88,6 @@ void onReceive(struct sockaddr_in *from, Buffer& buf) {
 		}
 		case opcodes::server::worldUpdate: {
 			uint16_t updateCount = buf.read<uint16_t>();
-			// std::printf("update count: %u\n", updateCount);
 			for (uint16_t i = 0; i < updateCount; ++i) {
 				uint32_t cellID = buf.read<uint32_t>();
 				uint16_t readFlags = buf.read<uint16_t>();
@@ -117,17 +115,17 @@ void onReceive(struct sockaddr_in *from, Buffer& buf) {
 				if (readFlags & opcodes::server::readFlags::skin) {
 					skin = buf.read<std::string>();
 				}
-				if (!me.cellsByID.has(cellID)) {
+				if (me.cellsByID.count(cellID) == 0) {
 					Cell* cell = new Cell(x, y, r, cellID, cellType,
 						color::hueToColor(prng()));
-					me.cellsByID.insert(cellID, cell);
+					me.cellsByID.insert(std::pair<uint32_t, Cell*>(cellID, cell));
 					if (cell->type == opcodes::cellType::myCell) {
 						cell->type = opcodes::cellType::player;
 						me.myCells.push_back(cell);
 					}
 					// TODO: add name and skin to cell
 				} else {
-					Cell* cell = me.cellsByID.read(cellID);
+					Cell* cell = me.cellsByID.at(cellID);
 					if (readFlags & opcodes::server::readFlags::pos) {
 						cell->x = x;
 						cell->y = y;
@@ -164,9 +162,9 @@ void update(float dt) {
 	keys = 0;
 	socky.sendMessage(&server, toServer);
 
-	me.cellsByID.forEach([&](TableNode<Cell*>& node)->void {
-		cellArray.push_back(node.payload);
-	});
+	for (std::pair<uint32_t, Cell*> pair : me.cellsByID) {
+		cellArray.push_back(pair.second);
+	}
 	std::sort(cellArray.begin(), cellArray.end(), [](Cell* a, Cell* b) {
 		return a->r < b->r;
 	});
