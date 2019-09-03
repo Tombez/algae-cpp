@@ -41,17 +41,17 @@ float viewportScale = 1.0;
 std::vector<Cell*> cellArray;
 Renderer renderer;
 
-static void cursorPosCallback(GLFWwindow* win, double xpos, double ypos) {
+static void cursorCallback(Window& win, double x, double y) {
 	prev = me.mouse;
-	me.mouse.assign((float)xpos, (float)ypos);
+	me.mouse.assign((float)x, (float)y);
 }
-static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+static void keyCallback(Window& win, int key, int scancode, int action, int mods) {
 	if (action != GLFW_PRESS)
 		return;
 
 	switch (key) {
 		case GLFW_KEY_ESCAPE: {
-			glfwSetWindowShouldClose(window, GLFW_TRUE);
+			glfwSetWindowShouldClose(win.gwin, GLFW_TRUE);
 			break;
 		}
 		case GLFW_KEY_SPACE: {
@@ -60,6 +60,10 @@ static void keyCallback(GLFWwindow* window, int key, int scancode, int action, i
 		}
 		case GLFW_KEY_W: {
 			keys |= opcodes::client::actions::eject;
+			break;
+		}
+		case GLFW_KEY_F11: {
+			window.toggleFullscreen();
 			break;
 		}
 	}
@@ -149,13 +153,14 @@ void onReceive(struct sockaddr_in *from, Buffer& buf) {
 void update(float dt) {
 	camera.assign(me.getPos());
 	viewScale = me.getViewScale();
-	viewportScale = std::max(ww / options::viewBaseWidth, wh / options::viewBaseHeight);
+	viewportScale = std::max(window.width / options::viewBaseWidth,
+		window.height / options::viewBaseHeight);
 	camera.r = viewScale * viewportScale;
 
 	toServer.setIndex(0);
 	toServer.write<uint8_t>(opcodes::client::input);
-	float x = (me.mouse.x - ww / 2.0) / camera.r + camera.x;
-	float y = (me.mouse.y - wh / 2.0) / camera.r + camera.y;
+	float x = (me.mouse.x - window.width / 2.0) / camera.r + camera.x;
+	float y = (me.mouse.y - window.height / 2.0) / camera.r + camera.y;
 	toServer.write<float>(x);
 	toServer.write<float>(y);
 	toServer.write<uint8_t>(keys);
@@ -175,16 +180,20 @@ void update(float dt) {
 }
 
 void draw() {
+	if (window.hasResized) {
+		glViewport(0, 0, window.width, window.height);
+		window.hasResized = false;
+	}
 	glClearColor(17.0/255.0, 17.0/255.0, 17.0/255.0, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	// grid
 	renderer.color = 170 << 24 | 170 << 16 | 170 << 8 | 51;
  	uint16_t step = options::client::gridStep;
-	float left = camera.x - (ww / 2) / camera.r;
-	float top = camera.y - (wh / 2) / camera.r;
-	float right = camera.x + (ww / 2) / camera.r;
-	float bottom = camera.y + (wh / 2) / camera.r;
+	float left = camera.x - (window.width / 2) / camera.r;
+	float top = camera.y - (window.height / 2) / camera.r;
+	float right = camera.x + (window.width / 2) / camera.r;
+	float bottom = camera.y + (window.height / 2) / camera.r;
 	float startX = left - std::fmod(left, step);
 	float startY = top - std::fmod(top, step);
 	for (float x = startX; x < right; x += step) {
@@ -201,11 +210,12 @@ void draw() {
 	}
 
 	glUniform2f(glsp.uniformLocations[0], camera.x, camera.y);
-	glUniform2f(glsp.uniformLocations[1], camera.r / (ww / 2), -camera.r / (wh / 2));
+	glUniform2f(glsp.uniformLocations[1], camera.r / (window.width / 2),
+		-camera.r / (window.height / 2));
 
 	renderer.render();
 
-	glfwSwapBuffers(window);
+	glfwSwapBuffers(window.gwin);
 }
 
 int main() {
@@ -217,8 +227,8 @@ int main() {
 	uint32_t second = 0;
 
 	init();
-	glfwSetKeyCallback(window, keyCallback);
-	glfwSetCursorPosCallback(window, cursorPosCallback);
+	window.cursorCallback = &cursorCallback;
+	window.keyCallback = &keyCallback;
 
 	std::printf("refresh rate %f\n", refreshRate);
 
@@ -233,7 +243,7 @@ int main() {
 	toServer.write<uint8_t>(0x0);
 	socky.sendMessage(&server, toServer);
 
-	while(!glfwWindowShouldClose(window)) {
+	while(!glfwWindowShouldClose(window.gwin)) {
 		glfwPollEvents();
 		socky.processMessages();
 

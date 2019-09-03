@@ -2,6 +2,7 @@
 
 // #include "../whichSystem.hpp"
 #include "./ShaderProgram.hpp"
+#include "./Window.hpp"
 
 #include <iostream>
 #include <vector>
@@ -11,11 +12,9 @@ void errorCallback(int error, const char* description) {
 	printf("glfw error %d, %s\n", error, description);
 }
 
-GLFWwindow* window = nullptr;
-int ww = 720;
-int wh = 405;
+Window window;
 ShaderProgram glsp;
-float refreshRate = 60.0;
+float refreshRate = 60.0; // default value
 
 void init() {
 	if (!glfwInit()) {
@@ -48,8 +47,9 @@ void init() {
 		puts("primary monitor was null..\n");
 	}
 
-	window = glfwCreateWindow(ww, wh, "Algae++", nullptr, nullptr);
-	glfwMakeContextCurrent(window);
+	new (&window) Window(options::client::windowWidth, options::client::windowHeight,
+		"Algae++", nullptr, nullptr);
+	glfwMakeContextCurrent(window.gwin);
 
 	glfwSwapInterval(0);
 
@@ -65,8 +65,8 @@ void init() {
 	glEnable(GL_MULTISAMPLE);
 
 	if (videoMode != nullptr) {
-		glfwSetWindowPos(window, videoMode->width / 2 - ww / 2,
-			videoMode->height / 2 - wh / 2);
+		glfwSetWindowPos(window.gwin, videoMode->width / 2 - window.width / 2,
+			videoMode->height / 2 - window.height / 2);
 	}
 
 	new (&glsp) ShaderProgram("./vertex.glsl", "./fragment.glsl",
